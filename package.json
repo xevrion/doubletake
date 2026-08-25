@@ -5,8 +5,10 @@
   "type": "module",
   "description": "A second look at every AI answer, before the user acts on it.",
   "scripts": {
+    "start": "bun run build:console && bun run src/server.ts",
     "dev": "bun run --watch src/server.ts",
-    "start": "bun run src/server.ts",
+    "dev:console": "cd console && bun run dev",
+    "build:console": "cd console && bun install --silent && bun run build",
     "eval": "bun run scripts/run-eval.ts",
     "selfcheck": "bun run scripts/selfcheck.ts",
     "seed": "bun run scripts/seed-traffic.ts"

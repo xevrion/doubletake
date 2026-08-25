@@ -49,6 +49,17 @@ score: a claim is **entailed** by the sources, **contradicted** by them, or
 simply **unsupported**. Those are three different problems and they deserve
 three different actions, which is exactly what the ladder gives them.
 
+## Layout
+
+```
+src/          the gateway: detectors, policy engine, audit store, HTTP API
+console/      the React console (Vite, Tailwind, shadcn/ui)
+web/          the console's build output, served by the API
+scripts/      self check, evaluation harness, traffic seeder
+docs/         architecture, evaluation, business proposal, regulatory sources
+data/eval/    the labelled golden set
+```
+
 ## Verifying it
 
 Three commands, no configuration required. The first two are how we check our own
@@ -72,11 +83,20 @@ provider failover chain always terminates offline.
 ```bash
 bun install
 cp .env.example .env      # optional: every default works offline
-bun run start             # http://localhost:3000
+bun run start             # builds the console, then serves on :3000
 ```
 
-First start downloads about 200 MB of model weights and takes roughly 20
-seconds. After that they are cached in `data/models` and startup is immediate.
+First start builds the React console and downloads about 200 MB of model
+weights, which takes roughly a minute. Both are cached afterwards, so subsequent
+starts are immediate.
+
+To work on the console with hot reload, run the API and the Vite dev server
+side by side:
+
+```bash
+bun run dev           # API on :3000
+bun run dev:console   # console on :5173, proxying /api to :3000
+```
 
 ```bash
 bun run eval              # detection quality against the golden set
