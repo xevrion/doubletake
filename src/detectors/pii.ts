@@ -79,6 +79,30 @@ export interface PiiHit {
   weight: number;
 }
 
+// context suppression. two failure modes the golden set caught:
+//   - a 12-digit order number that happens to satisfy Verhoeff reads as aadhaar
+//   - a company's own published support address reads as a personal email leak
+// both are false positives, and false positives are what get a guardrail
+// switched off. the fix is to look at the words around the match.
+const ORDER_CONTEXT = /\b(?:order|invoice|txn|transaction|reference|ref|tracking|awb|ticket|booking|receipt|shipment|consignment)\s*(?:no\.?|number|id|#)?\s*[:#-]?\s*$/i;
+const PUBLIC_CONTACT = /\b(?:contact|email|reach|write to|call)\s+(?:us|our team|support|sales|helpdesk)\b|\b(?:support|sales|info|help|contact|noreply|no-reply|admin|hello|care)@/i;
+
+const ORDER_TRAILING = /^\s*(?:ships?|shipped|delivered|dispatched|arriv\w+|is\s+(?:on\s+its\s+way|out\s+for\s+delivery|confirmed|pending))\b/i;
+
+function suppressed(text: string, hit: { label: string; start: number; end: number; match: string }): boolean {
+  // look at the ~40 characters immediately before the match
+  const before = text.slice(Math.max(0, hit.start - 40), hit.start);
+  const after = text.slice(hit.end, hit.end + 40);
+  // an aadhaar number is never the subject of a shipping sentence. context on
+  // either side is enough to tell an identifier from an order reference.
+  if (hit.label === "aadhaar" && (ORDER_CONTEXT.test(before) || ORDER_TRAILING.test(after))) return true;
+  if (hit.label === "email") {
+    const window = text.slice(Math.max(0, hit.start - 40), hit.end + 5);
+    if (PUBLIC_CONTACT.test(window)) return true;
+  }
+  return false;
+}
+
 export function scanPii(text: string): PiiHit[] {
   const hits: PiiHit[] = [];
   for (const rule of RULES) {
@@ -88,7 +112,9 @@ export function scanPii(text: string): PiiHit[] {
     while ((m = rule.pattern.exec(text)) !== null) {
       const raw = m[0];
       if (rule.validate && !rule.validate(raw)) continue;
-      hits.push({ label: rule.label, match: raw, start: m.index, end: m.index + raw.length, weight: rule.weight });
+      const hit = { label: rule.label, match: raw, start: m.index, end: m.index + raw.length, weight: rule.weight };
+      if (suppressed(text, hit)) continue;
+      hits.push(hit);
     }
   }
   // longest match wins when two rules overlap: a 16-digit card shouldn't also

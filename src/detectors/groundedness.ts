@@ -48,12 +48,24 @@ export function splitSentences(text: string): { text: string; start: number; end
 const FACTUAL_MARKERS = /\b(is|are|was|were|has|have|will|must|can|cost|costs|charge|charges|refund|policy|days?|hours?|percent|%|rs\.?|₹|\$|guarantee|entitled|eligible|require[ds]?|allow(?:s|ed)?|within|up to|at least)\b/i;
 const NUMERIC = /\d/;
 
+// identifiers echoed back to the user (order numbers, ticket ids, tracking
+// codes) are not claims about the world -- they came FROM the user or the
+// system, so there is nothing to verify against a knowledge base. treating them
+// as unverified facts is how a routine "your order ships tomorrow" got escalated
+// to a human in the golden set.
+const IDENTIFIER_ECHO = /\b(?:order|invoice|txn|transaction|reference|ref|tracking|awb|ticket|booking|receipt|case|shipment|policy)\s*(?:no\.?|number|id|#)?\s*[:#-]?\s*[A-Z0-9-]{5,}/i;
+
 export function isCheckableClaim(sentence: string): boolean {
   const words = tokenize(sentence);
   if (words.length < 4) return false;
   // questions and explicit hedges aren't assertions of fact.
   if (/\?\s*$/.test(sentence)) return false;
   if (/\b(i think|might be|may vary|please (?:check|confirm|contact)|i'?m not sure|cannot confirm)\b/i.test(sentence)) return false;
+
+  // strip identifiers before deciding whether any real numeric claim remains.
+  const withoutIds = sentence.replace(IDENTIFIER_ECHO, " ");
+  if (!FACTUAL_MARKERS.test(withoutIds) && !NUMERIC.test(withoutIds)) return false;
+
   return FACTUAL_MARKERS.test(sentence) || NUMERIC.test(sentence);
 }
 

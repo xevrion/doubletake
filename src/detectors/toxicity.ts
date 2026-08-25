@@ -21,13 +21,17 @@ const UNSAFE = [
 // protected attributes as defined across the equality statutes we care about
 // (EU AI Act art.10 / GDPR art.9 special categories, and india's constitutional
 // grounds in art.15).
-const PROTECTED = /\b(?:race|racial|caste|religion|religious|muslim|hindu|christian|sikh|dalit|gender|sex|male|female|women|men|pregnan\w*|disab\w+|age[ds]?|elderly|young|ethnic\w*|nationality|immigrant|sexual\s+orientation|gay|lesbian|marital\s+status)\b/i;
+const PROTECTED = /\b(?:race|racial|caste|religion|religious|muslim|hindu|christian|sikh|dalit|gender|sex|male|female|women|men|pregnan\w*|disab\w+|age[ds]?|ageing|aging|older|younger|elderly|young|senior\s+citizens?|ethnic\w*|nationality|immigrant|migrant|foreign|sexual\s+orientation|gay|lesbian|transgender|marital\s+status|caste)\b/i;
 
 // the giveaway is a protected attribute sitting inside a decision or an
 // inference about a person, not merely being mentioned.
 const DECISION_CONTEXT = /\b(?:because|since|due\s+to|owing\s+to|given\s+(?:that|their|his|her)|therefore|so\s+(?:we|i|you)\s+should|not\s+(?:eligible|suitable|a\s+good\s+fit)|reject|decline|deny|approve|higher\s+risk|lower\s+risk|less\s+likely|more\s+likely|typically|tend\s+to|usually\s+are)\b/i;
 
-const GENERALISATION = /\b(?:all|most|every|typical|these\s+people|those\s+people|they\s+(?:all|usually|tend))\b/i;
+const GENERALISATION = /\b(?:all|most|every|typical(?:ly)?|general(?:ly)?|these\s+people|those\s+people|they\s+(?:all|usually|tend)|are\s+(?:less|more)\b)/i;
+
+// a comparative judgement about a group ("less adaptable", "more reliable") is
+// the stereotype pattern even without an explicit decision verb attached.
+const COMPARATIVE_JUDGEMENT = /\b(?:less|more|worse|better|poorly|highly)\s+(?:adaptable|productive|reliable|competent|capable|suitable|trainable|motivated|committed|aggressive|emotional)\b/i;
 
 export const toxicityDetector: Detector = {
   name: "safety:lexicon",
@@ -55,11 +59,14 @@ export const toxicityDetector: Detector = {
       if (!prot) continue;
       const inDecision = DECISION_CONTEXT.test(sent);
       const generalises = GENERALISATION.test(sent);
-      if (!inDecision && !generalises) continue;
+      const judges = COMPARATIVE_JUDGEMENT.test(sent);
+      if (!inDecision && !generalises && !judges) continue;
 
       // both signals together = a stereotype driving a decision. that's the
       // pattern the high-risk profile hard-blocks on.
-      const w = inDecision && generalises ? 0.88 : inDecision ? 0.72 : 0.55;
+      // a stereotype driving a decision is the worst case; a bare generalisation
+      // is still worth a hedge in an internal tool.
+      const w = inDecision && (generalises || judges) ? 0.88 : inDecision ? 0.72 : judges ? 0.62 : 0.55;
       score = Math.max(score, w);
       categories.add("bias");
       const idx = text.indexOf(sent);

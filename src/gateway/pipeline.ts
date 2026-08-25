@@ -117,7 +117,16 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
     asyncPending = true;
   }
 
-  const decision = decide(findings, profile);
+  // the lexical grounding check is a sub-millisecond pre-filter, not a verdict.
+  // once NLI has actually read the sources, keeping the crude score around would
+  // let the weaker signal outvote the stronger one -- which is how g07 (a
+  // perfectly grounded loan rationale) ended up escalated to a human.
+  const nliRan = findings.some((f) => f.detector === "groundedness:nli");
+  const effective = nliRan
+    ? findings.filter((f) => f.detector !== "groundedness:lexical")
+    : findings;
+
+  const decision = decide(effective, profile);
 
   // patching: only PII redaction is a safe automatic edit. rewriting a claim
   // would mean the checker is now authoring content, which is a different and
@@ -161,7 +170,7 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
     action: decision.action, finalAction: decision.action,
     topCategory: decision.topCategory, maxScore: decision.maxScore,
     uncertain: decision.uncertain, rationale: decision.rationale,
-    findings, triggeredRules: decision.triggeredBy,
+    findings: effective, triggeredRules: decision.triggeredBy,
     latencyMs: totalMs, costUsd: req.usage?.costUsd ?? 0, savedUsd: req.savedUsd ?? 0,
     retentionUntil: Date.now() + profile.retentionDays * 86400_000,
   };
@@ -174,7 +183,7 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
     originalResponse: req.response,
     patched,
     decision,
-    findings,
+    findings: effective,
     profile: { id: profile.id, label: profile.label, latencyBudgetMs: profile.latencyBudgetMs },
     timing: {
       totalMs: Number(totalMs.toFixed(2)),
