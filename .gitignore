@@ -7,3 +7,4 @@ data/*.db
 data/*.jsonl
 .DS_Store
 data/models/
+web/eval-results.json

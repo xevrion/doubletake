@@ -86,6 +86,20 @@ async function main() {
     console.log(`  prevalence ${(prev * 100).toFixed(0).padStart(2)}%  ->  PPV ${(ppv * 100).toFixed(1)}%  ` +
       `(of every 100 flags, ~${Math.round(ppv * 100)} are real)`);
   }
+  // write the headline numbers where the dashboard can read them, so the UI can
+  // never drift from the last measured run.
+  await Bun.write("web/eval-results.json", JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    cases: cases.length,
+    precision: Number(precision.toFixed(3)),
+    recall: Number(recall.toFixed(3)),
+    f1: Number(f1.toFixed(3)),
+    fpr: Number(fpr.toFixed(3)),
+    exactAgreement: exact,
+    latencyP50: Number(p50.toFixed(1)),
+    latencyP95: Number(p95.toFixed(1)),
+  }, null, 2) + "\n");
+
   console.log(`\nThis is the alert-fatigue argument in one table: high recall at low`);
   console.log(`prevalence means most flags are false. That is why DoubleTake patches`);
   console.log(`and hedges by default and reserves blocking for the irreversible cases.\n`);
