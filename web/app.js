@@ -57,6 +57,7 @@ async function boot() {
   renderPolicies();
   loadScenario(0);
   loadQueue();
+  loadOverview();
 }
 
 function profileMeta() {
@@ -103,6 +104,7 @@ async function run(endpoint, btn) {
     if (endpoint === "/api/ask" && r.originalResponse) $("response").value = r.originalResponse;
     render(r);
     loadQueue();
+    loadOverview();
   } catch (e) {
     $("idle").hidden = false;
     $("idle").textContent = `Request failed: ${e.message}`;
@@ -244,6 +246,68 @@ async function loadTrust() {
       </div>`).join("");
 }
 
+const ACTIONS = ["pass", "patch", "pause", "page"];
+
+async function loadOverview() {
+  const d = await fetch("/api/overview").then((r) => r.json());
+  const e = d.economics;
+
+  $("ovMetrics").innerHTML = [
+    metric("Interactions", String(d.interactions), "checked this session"),
+    metric("Held for review", String(d.pendingReview), d.reviewed ? `${d.reviewed} already resolved` : "awaiting a reviewer"),
+    metric("Corrections issued", String(d.corrections), "late checks that changed the call"),
+    metric("Oversight cost", `$${num(e.perThousandUsd, 3)}`, "per 1,000 interactions"),
+    metric("Routing saved", `$${num(e.savedUsd, 4)}`, e.netUsd >= 0 ? "more than oversight cost" : "less than oversight cost"),
+    metric("Latency p95", `${num(d.latency.p95)}ms`, `p50 ${num(d.latency.p50)}ms · p99 ${num(d.latency.p99)}ms`),
+  ].join("");
+
+  const total = Math.max(1, d.interactions);
+  $("ovLadder").innerHTML =
+    `<div class="mix">${ACTIONS.map((a) => {
+      const v = d.byAction[a] ?? 0;
+      return v ? `<span data-a="${a}" style="width:${(v / total) * 100}%" title="${a}: ${v}"></span>` : "";
+    }).join("")}</div>` +
+    `<div class="mix-key">${ACTIONS.map((a) =>
+      `<span><i class="dot" data-a="${a}"></i>${a} ${d.byAction[a] ?? 0}</span>`).join("")}</div>`;
+
+  const cats = Object.entries(d.byCategory).sort((a, b) => b[1] - a[1]);
+  const catMax = Math.max(1, ...cats.map(([, v]) => v));
+  $("ovCats").innerHTML = cats.length === 0
+    ? `<p class="note">Nothing flagged yet.</p>`
+    : `<div class="bars">${cats.map(([k, v]) =>
+        `<div class="bar"><span>${esc(k)}</span><span class="track"><span class="fill" style="width:${(v / catMax) * 100}%"></span></span><span class="n">${v}</span></div>`).join("")}</div>`;
+
+  $("ovProfiles").innerHTML =
+    `<thead><tr><th>Use case</th><th class="n">Checked</th><th class="n">Flagged</th><th class="n">Rate</th></tr></thead><tbody>` +
+    Object.entries(d.byProfile).map(([k, v]) =>
+      `<tr><td>${esc(k)}</td><td class="n">${v.total}</td><td class="n">${v.flagged}</td><td class="n">${num((v.flagged / Math.max(1, v.total)) * 100)}%</td></tr>`).join("") +
+    `</tbody>`;
+
+  $("ovRecent").innerHTML =
+    `<thead><tr><th>Action</th><th>Prompt</th><th class="n">Score</th><th class="n">ms</th></tr></thead><tbody>` +
+    d.recent.map((r) =>
+      `<tr><td><span class="badge" data-a="${esc(r.action)}">${esc(r.action)}</span></td>` +
+      `<td>${esc(r.prompt)}${r.reviewed ? ' <span class="tag">reviewed</span>' : ""}</td>` +
+      `<td class="n">${r.topCategory ? num(r.maxScore, 2) : "—"}</td>` +
+      `<td class="n">${num(r.latencyMs)}</td></tr>`).join("") +
+    `</tbody>`;
+}
+
+async function loadCorrections() {
+  const { items } = await fetch("/api/corrections").then((r) => r.json());
+  $("corrections").innerHTML = items.length === 0
+    ? `<p class="empty">No corrections issued. Deep checks have agreed with every inline decision so far.</p>`
+    : items.map((c) => `
+      <div class="qrow">
+        <div class="row">
+          <span class="badge" data-a="${esc(c.suggestedAction)}">recalled → ${esc(c.suggestedAction)}</span>
+          <span class="note">exposed for ${num(c.exposureMs)}ms · ${new Date(c.issuedAt).toLocaleTimeString()}</span>
+        </div>
+        <p class="qtext">${esc(c.reason)}</p>
+        <ul class="evidence">${c.findings.flatMap((f) => f.evidence.slice(0, 2)).map((e) => `<li>${esc(e.text)}</li>`).join("")}</ul>
+      </div>`).join("");
+}
+
 function renderPolicies() {
   $("policies").innerHTML = PROFILES.map((p) => `
     <div class="policy">
@@ -273,6 +337,11 @@ $("profile").addEventListener("change", profileMeta);
 $("runCheck").addEventListener("click", (e) => run("/api/check", e.currentTarget));
 $("runAsk").addEventListener("click", (e) => run("/api/ask", e.currentTarget));
 $("refreshQueue").addEventListener("click", loadQueue);
+$("refreshCorr").addEventListener("click", loadCorrections);
+document.addEventListener("click", (e) => {
+  const g = e.target.closest("[data-goto]");
+  if (g) document.querySelector(`.tab[data-view="${g.dataset.goto}"]`)?.click();
+});
 $("queue").addEventListener("click", (e) => {
   const b = e.target.closest("[data-resolve]");
   if (b) resolve(b.dataset.resolve, b.dataset.to, b.dataset.verdict);
@@ -283,6 +352,8 @@ for (const tab of document.querySelectorAll(".tab")) {
     for (const v of document.querySelectorAll(".view")) v.hidden = v.id !== `view-${tab.dataset.view}`;
     if (tab.dataset.view === "trust") loadTrust();
     if (tab.dataset.view === "queue") loadQueue();
+    if (tab.dataset.view === "overview") loadOverview();
+    if (tab.dataset.view === "corrections") loadCorrections();
   });
 }
 

@@ -11,15 +11,37 @@
 <header class="topbar">
   <div class="brand"><b>DoubleTake</b><span>a second look at every AI answer</span></div>
   <div class="tabs" role="tablist">
-    <button class="tab" role="tab" aria-selected="true" data-view="live">Live check</button>
+    <button class="tab" role="tab" aria-selected="true" data-view="overview">Overview</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="live">Live check</button>
     <button class="tab" role="tab" aria-selected="false" data-view="queue">Review queue <span class="count" id="queueCount" data-zero="true">0</span></button>
     <button class="tab" role="tab" aria-selected="false" data-view="trust">Trust metrics</button>
+    <button class="tab" role="tab" aria-selected="false" data-view="corrections">Corrections</button>
     <button class="tab" role="tab" aria-selected="false" data-view="policy">Policy</button>
   </div>
 </header>
 
 <main>
-  <section class="view" id="view-live">
+  <section class="view" id="view-overview">
+    <dl class="metrics metrics-lg" id="ovMetrics"></dl>
+    <div class="halves" style="margin-top:1rem">
+      <div class="card">
+        <header><h2>Where traffic lands</h2><span class="note">this session</span></header>
+        <div class="body">
+          <div id="ovLadder"></div>
+          <p class="section-label">By risk category</p>
+          <div id="ovCats"></div>
+          <p class="section-label">By use case</p>
+          <table id="ovProfiles"></table>
+        </div>
+      </div>
+      <div class="card">
+        <header><h2>Recent decisions</h2><a class="note linkish" data-goto="queue">open review queue</a></header>
+        <div class="body"><table id="ovRecent"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-live" hidden>
     <div class="split">
       <div class="card">
         <header><h2>Request</h2><span class="note" id="providerNote"></span></header>
@@ -110,6 +132,16 @@
           <p class="section-label">Threshold tuning from reviewer feedback</p>
           <div id="tuning"></div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-corrections" hidden>
+    <div class="card">
+      <header><h2>Recall and correct</h2><button class="btn btn-quiet btn-sm" id="refreshCorr">Refresh</button></header>
+      <div class="body">
+        <p class="lede" style="margin-bottom:.9rem">A customer-facing bot cannot afford a judge model inline, so deep checks run after the answer has already gone out. When a late check disagrees with the inline decision, the gateway issues a correction against the original response and records how long the unchecked answer was live.</p>
+        <div id="corrections"></div>
       </div>
     </div>
   </section>

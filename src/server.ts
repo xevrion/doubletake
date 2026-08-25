@@ -155,6 +155,52 @@ app.get("/api/tuning", (c) => {
 });
 
 // live economics for the dashboard: what the gateway cost and what routing saved.
+// one call that populates the whole overview, so the dashboard does not fan
+// out into six requests on load.
+app.get("/api/overview", (c) => {
+  const all = recentAudits(500);
+  const byAction: Record<string, number> = { pass: 0, patch: 0, pause: 0, page: 0 };
+  const byProfile: Record<string, { total: number; flagged: number }> = {};
+  const byCategory: Record<string, number> = {};
+  let spend = 0, saved = 0, uncertain = 0;
+
+  for (const r of all) {
+    byAction[r.finalAction] = (byAction[r.finalAction] ?? 0) + 1;
+    const p = (byProfile[r.profileId] ??= { total: 0, flagged: 0 });
+    p.total++;
+    if (r.finalAction !== "pass") p.flagged++;
+    if (r.topCategory && r.finalAction !== "pass") byCategory[r.topCategory] = (byCategory[r.topCategory] ?? 0) + 1;
+    spend += r.costUsd;
+    saved += r.savedUsd;
+    if (r.uncertain) uncertain++;
+  }
+
+  const lat = all.map((r) => r.latencyMs).sort((a, b) => a - b);
+  const pct = (q: number) => lat.length ? lat[Math.min(lat.length - 1, Math.floor(lat.length * q))]! : 0;
+  const reviewed = all.filter((r) => r.override).length;
+
+  return c.json({
+    interactions: all.length,
+    byAction, byProfile, byCategory,
+    uncertain,
+    reviewed,
+    pendingReview: all.filter((r) => (r.finalAction === "pause" || r.finalAction === "page") && !r.override).length,
+    corrections: recentCorrections(100).length,
+    economics: {
+      spendUsd: Number(spend.toFixed(5)),
+      savedUsd: Number(saved.toFixed(5)),
+      netUsd: Number((saved - spend).toFixed(5)),
+      perThousandUsd: all.length ? Number(((spend / all.length) * 1000).toFixed(3)) : 0,
+    },
+    latency: { p50: Number(pct(0.5).toFixed(1)), p95: Number(pct(0.95).toFixed(1)), p99: Number(pct(0.99).toFixed(1)) },
+    recent: all.slice(0, 12).map((r) => ({
+      id: r.id, ts: r.ts, profileId: r.profileId, action: r.finalAction,
+      topCategory: r.topCategory, maxScore: r.maxScore, latencyMs: r.latencyMs,
+      prompt: r.promptPreview.slice(0, 70), reviewed: !!r.override,
+    })),
+  });
+});
+
 app.get("/api/economics", (c) => {
   const all = recentAudits(500);
   const spend = all.reduce((s, r) => s + r.costUsd, 0);
