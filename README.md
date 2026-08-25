@@ -22,11 +22,12 @@ Every response lands on one rung of a ladder, chosen by severity and reversibili
 | **Pause** | wrong enough to be worth another attempt | regeneration on a stronger model |
 | **Page** | irreversible or high-stakes | a holding message, and a human is notified |
 
-Blocking is reserved for the last rung. The reasoning is in the numbers: on a
-labelled golden set the detectors reach recall 1.000 at a 0.167 false-positive
-rate, which at a realistic 10% risk prevalence means roughly 40 of every 100
-flags are genuine. A system that blocked on all of them would be switched off
-within a week. `bun run eval` prints that table.
+Blocking is reserved for the last rung, and the reason is arithmetic. Even a
+detector with perfect recall produces mostly false alarms once the share of
+genuinely risky traffic is small: at a 5% false-positive rate and 1% prevalence,
+fewer than one flag in five is real. A system that blocked on all of them would
+be routed around within a week. `bun run eval` prints that table, and
+[evaluation.md](docs/evaluation.md) works through it.
 
 ## What is actually running
 
@@ -47,6 +48,24 @@ The NLI check is the interesting one. It returns three states rather than a
 score: a claim is **entailed** by the sources, **contradicted** by them, or
 simply **unsupported**. Those are three different problems and they deserve
 three different actions, which is exactly what the ladder gives them.
+
+## Verifying it
+
+Three commands, no configuration required. The first two are how we check our own
+claims, and they are the fastest way for someone else to check them too.
+
+```bash
+bun run selfcheck   # 46 assertions: policy, every detector, audit trail, failover
+bun run eval        # detection quality against the labelled golden set
+bun run seed        # populate the console with a session of realistic traffic
+```
+
+`selfcheck` runs in about three seconds once models are cached and exits non-zero
+on any failure. It covers the things a reader would otherwise have to take on
+trust: that the Verhoeff checksum rejects invalid Aadhaar numbers, that a failed
+detector escalates rather than silently passing, that raw identifiers never reach
+the audit log, that a held response never ships its original text, and that the
+provider failover chain always terminates offline.
 
 ## Running it
 
@@ -109,6 +128,16 @@ latency, and the cost. Reviewer overrides are captured as structured verdicts
 rather than free text, because those verdicts are the only ground truth the
 system ever gets. `/api/tuning` reads them back and proposes threshold changes;
 it does not apply them silently.
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [architecture.md](docs/architecture.md) | Request path, detector tiers, why NLI over a judge model, what is not built |
+| [evaluation.md](docs/evaluation.md) | Methodology, current results, the base-rate problem, per-detector notes |
+| [business-proposal.md](docs/business-proposal.md) | Problem framing, market, business case, roadmap, risks |
+| [regulatory.md](docs/regulatory.md) | Every external figure with its source, date and confidence level |
+| [demo-script.md](docs/demo-script.md) | Five-minute walkthrough |
 
 ## Limitations
 
