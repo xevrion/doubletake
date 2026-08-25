@@ -1,8 +1,8 @@
-// the vocabulary the whole gateway speaks. keeping this in one place because
-// every detector, every policy rule and the audit log all have to agree on
-// what a "risk" is -- the round-2 brief points out that bias/hallucination/privacy
-// overlap in practice, so a finding carries *all* the categories it triggers
-// rather than being forced into one bucket.
+// Shared vocabulary for detectors, policy and the audit log.
+//
+// Bias, hallucination and privacy overlap in practice: a fabricated detail about
+// a named person is both a hallucination and a privacy problem. So a finding
+// carries every category it triggers rather than being forced into one.
 
 export type RiskCategory =
   | "hallucination"
@@ -29,8 +29,7 @@ export interface Finding {
   tier: DetectorTier;
 }
 
-// every claim the system makes has to be traceable back to something concrete,
-// otherwise the audit trail is just vibes.
+// Every claim traces back to something concrete, or the audit trail is worthless.
 export interface Evidence {
   kind: "span" | "citation" | "metric" | "note";
   text: string;
@@ -40,16 +39,13 @@ export interface Evidence {
   value?: number;
 }
 
-// tier 0 runs inline on everything, tier 1 runs async / sampled, tier 2 is batch.
-// this is the latency budget mechanism: a profile picks which tiers it can afford.
+// Tier is a latency contract, not a quality ranking: a profile picks what it can afford.
 export type DetectorTier = 0 | 1 | 2;
 
 export interface Detector {
   name: string;
   tier: DetectorTier;
   categories: RiskCategory[];
-  // detectors must never throw into the request path; they return a null finding
-  // instead and the gateway records the failure as "unknown", which escalates.
   run(input: DetectorInput): Promise<Finding | null>;
 }
 

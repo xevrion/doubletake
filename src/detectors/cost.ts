@@ -1,18 +1,15 @@
 import type { Detector, DetectorInput, Finding, Evidence } from "../policy/types.ts";
 import { severityOf } from "../policy/decide.ts";
 
-// the cost axis. this is the part every other guardrail product leaves out,
-// and it's the one that makes the whole layer self-funding.
+// The cost axis, which is the part other guardrail products leave out.
 //
-// prices are USD per million tokens. VERIFY THESE before quoting them in the
-// pitch -- provider pricing moves and this table is a snapshot, not a source
-// of truth. structure matters more than the exact cents here.
+// Prices are USD per million tokens and are a snapshot, not a source of truth.
+// Re-verify before quoting them anywhere it matters.
 export interface ModelPrice {
   inputPerM: number;
   outputPerM: number;
   tier: "frontier" | "mid" | "cheap";
-  // rough capability score, used by the router to find the cheapest model that
-  // can still plausibly do the job.
+  // Used by the router to find the cheapest model that can still do the job.
   capability: number;
 }
 
@@ -36,15 +33,14 @@ export function estimateCost(model: string, promptTokens: number, completionToke
   return (promptTokens / 1e6) * p.inputPerM + (completionTokens / 1e6) * p.outputPerM;
 }
 
-// no tokenizer dependency: ~4 chars per token is close enough for budgeting and
-// avoids shipping a 2MB wasm blob for a number we only use to compare against
-// a threshold. swap in tiktoken if exact accounting is ever needed.
+// Four characters per token is close enough for budgeting. Real usage figures
+// from the provider are preferred wherever they exist; this is for pre-flight.
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-// budget state per API key / tenant. in production this is redis; a map is
-// honest for a prototype and keeps the demo dependency-free.
+// Per-tenant budget state. Redis in production; a map keeps the prototype free
+// of dependencies.
 interface Budget {
   spentUsd: number;
   windowStart: number;
@@ -65,7 +61,6 @@ export interface BudgetConfig {
 const DEFAULT_BUDGET: BudgetConfig = { hourlyUsdCap: 5.0, perRequestUsdCap: 0.25, loopThreshold: 4 };
 
 function hashish(s: string): string {
-  // cheap content signature; we only need "is this the same request again".
   let h = 0;
   const norm = s.toLowerCase().replace(/\s+/g, " ").slice(0, 400);
   for (let i = 0; i < norm.length; i++) { h = ((h << 5) - h + norm.charCodeAt(i)) | 0; }
@@ -121,8 +116,7 @@ export function makeCostDetector(cfg: BudgetConfig = DEFAULT_BUDGET): Detector {
         evidence.push({ kind: "metric", text: `Hourly spend $${b.spentUsd.toFixed(2)} of $${cfg.hourlyUsdCap} cap (${(burn * 100).toFixed(0)}%)`, value: b.spentUsd });
       }
 
-      // 3. the same prompt over and over: a runaway agent loop, which is the
-      // expensive failure mode nobody notices until the invoice arrives.
+      // A runaway agent loop: the expensive failure nobody notices until the invoice.
       if (repeats >= cfg.loopThreshold) {
         const s = Math.min(1, 0.6 + repeats * 0.08);
         score = Math.max(score, s);
@@ -137,7 +131,7 @@ export function makeCostDetector(cfg: BudgetConfig = DEFAULT_BUDGET): Detector {
         categories: ["cost"],
         score,
         severity: severityOf(score),
-        confidence: 0.99, // arithmetic on observed usage; nothing to be unsure about
+        confidence: 0.99, // arithmetic on observed usage
         evidence,
         latencyMs,
         tier: 0,
@@ -146,9 +140,8 @@ export function makeCostDetector(cfg: BudgetConfig = DEFAULT_BUDGET): Detector {
   };
 }
 
-// the routing side of the cost story: pick the cheapest model whose capability
-// clears what the task needs. this is where the savings that fund the oversight
-// actually come from.
+// Cheapest model whose capability clears the task. This is where the savings that
+// fund the oversight come from.
 export function routeModel(requiredCapability: number, exclude: string[] = []): { model: string; price: ModelPrice } {
   const candidates = Object.entries(PRICES)
     .filter(([name, p]) => p.capability >= requiredCapability && !exclude.includes(name))

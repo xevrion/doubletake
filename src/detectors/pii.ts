@@ -1,10 +1,10 @@
 import type { Detector, DetectorInput, Finding, Evidence } from "../policy/types.ts";
 import { severityOf } from "../policy/decide.ts";
 
-// tier-0 PII detection. deliberately rule-based: it's deterministic, it runs in
-// under a millisecond, and for structured identifiers a regex plus a checksum
-// beats a model. the india-specific rules matter because every off-the-shelf
-// PII library we looked at is US/EU-centric and misses aadhaar and PAN entirely.
+// Tier-0 personal data detection. Rule-based on purpose: for structured
+// identifiers a regex plus a checksum beats a model, and it runs in under a
+// millisecond. The India rules exist because the off-the-shelf libraries are
+// US and EU centric and miss Aadhaar and PAN entirely.
 
 interface PiiRule {
   label: string;
@@ -13,9 +13,8 @@ interface PiiRule {
   validate?: (m: string) => boolean;
 }
 
-// Verhoeff checksum -- the algorithm UIDAI uses for the 12th aadhaar digit.
-// without this, any 12-digit number (an order id, a timestamp) reads as aadhaar
-// and the false-positive rate makes the detector useless.
+// Verhoeff, the checksum UIDAI uses for the twelfth Aadhaar digit. Without it any
+// twelve-digit order number reads as an Aadhaar and the detector is unusable.
 const D_TABLE = [
   [0,1,2,3,4,5,6,7,8,9],[1,2,3,4,0,6,7,8,9,5],[2,3,4,0,1,7,8,9,5,6],
   [3,4,0,1,2,8,9,5,6,7],[4,0,1,2,3,9,5,6,7,8],[5,9,8,7,6,0,4,3,2,1],
@@ -41,8 +40,7 @@ export function verhoeffValid(num: string): boolean {
   return c === 0;
 }
 
-// Luhn, for card numbers. same reasoning as above: cheap and it kills the
-// false positives that a bare \d{16} would generate.
+// Luhn does the same job for card numbers.
 export function luhnValid(num: string): boolean {
   const digits = num.replace(/\D/g, "");
   if (digits.length < 13 || digits.length > 19) return false;
@@ -79,11 +77,9 @@ export interface PiiHit {
   weight: number;
 }
 
-// context suppression. two failure modes the golden set caught:
-//   - a 12-digit order number that happens to satisfy Verhoeff reads as aadhaar
-//   - a company's own published support address reads as a personal email leak
-// both are false positives, and false positives are what get a guardrail
-// switched off. the fix is to look at the words around the match.
+// Context suppression, for two false positives the golden set caught: an order
+// number that happens to satisfy Verhoeff, and a company's own published support
+// address. False positives are what get a guardrail switched off.
 const ORDER_CONTEXT = /\b(?:order|invoice|txn|transaction|reference|ref|tracking|awb|ticket|booking|receipt|shipment|consignment)\s*(?:no\.?|number|id|#)?\s*[:#-]?\s*$/i;
 const PUBLIC_CONTACT = /\b(?:contact|email|reach|write to|call)\s+(?:us|our team|support|sales|helpdesk)\b|\b(?:support|sales|info|help|contact|noreply|no-reply|admin|hello|care)@/i;
 
@@ -93,8 +89,7 @@ function suppressed(text: string, hit: { label: string; start: number; end: numb
   // look at the ~40 characters immediately before the match
   const before = text.slice(Math.max(0, hit.start - 40), hit.start);
   const after = text.slice(hit.end, hit.end + 40);
-  // an aadhaar number is never the subject of a shipping sentence. context on
-  // either side is enough to tell an identifier from an order reference.
+  // An Aadhaar is never the subject of a shipping sentence.
   if (hit.label === "aadhaar" && (ORDER_CONTEXT.test(before) || ORDER_TRAILING.test(after))) return true;
   if (hit.label === "email") {
     const window = text.slice(Math.max(0, hit.start - 40), hit.end + 5);
@@ -117,8 +112,7 @@ export function scanPii(text: string): PiiHit[] {
       hits.push(hit);
     }
   }
-  // longest match wins when two rules overlap: a 16-digit card shouldn't also
-  // be reported as a phone number hiding inside it.
+  // Longest match wins, so a card is not also reported as the phone number inside it.
   return dedupeOverlaps(hits);
 }
 
@@ -131,8 +125,7 @@ function dedupeOverlaps(hits: PiiHit[]): PiiHit[] {
   return kept.sort((a, b) => a.start - b.start);
 }
 
-// redaction keeps the shape of the value so the sentence still reads naturally
-// and a human reviewer can see what kind of thing was removed.
+// Keeps the shape so the sentence still reads and the reviewer sees what went.
 export function redactPii(text: string, hits: PiiHit[]): string {
   let out = "";
   let cursor = 0;
@@ -153,8 +146,7 @@ export const piiDetector: Detector = {
     const latencyMs = performance.now() - t0;
     if (hits.length === 0) return null;
 
-    // score from the most sensitive identifier, nudged up when several appear:
-    // one email is a lapse, an email plus a card number is a breach.
+    // One email is a lapse; an email beside a card number is a breach.
     const top = Math.max(...hits.map((h) => h.weight));
     const score = Math.min(1, top + Math.min(0.15, (hits.length - 1) * 0.05));
 
@@ -170,7 +162,6 @@ export const piiDetector: Detector = {
       categories: ["privacy"],
       score,
       severity: severityOf(score),
-      // deterministic rules with checksums are about as confident as it gets.
       confidence: 0.95,
       evidence,
       latencyMs,
@@ -179,8 +170,7 @@ export const piiDetector: Detector = {
   },
 };
 
-// never write the raw identifier into the audit log -- the log itself would
-// become the leak. keep enough to recognise it, not enough to use it.
+// Enough to recognise, not enough to use. The log must not become the leak.
 function maskForLog(v: string): string {
   if (v.length <= 4) return "*".repeat(v.length);
   return v.slice(0, 2) + "*".repeat(Math.max(3, v.length - 4)) + v.slice(-2);

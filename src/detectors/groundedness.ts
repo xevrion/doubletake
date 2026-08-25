@@ -1,16 +1,11 @@
 import type { Detector, DetectorInput, Finding, Evidence, GroundingSource } from "../policy/types.ts";
 import { severityOf } from "../policy/decide.ts";
 
-// hallucination detection without a ground-truth oracle.
-//
-// the round-2 brief makes the honest point that there is often no reliable
-// real-time truth to check against. so we don't claim to detect "false" -- we
-// detect UNSUPPORTED: claims that the supplied sources do not back up. that is
-// a weaker but checkable property, and it maps to what an enterprise actually
-// controls (its own knowledge base).
-//
-// tier 0 does lexical grounding, which is crude but costs ~1ms and catches the
-// blatant cases. tier 1 (judge.ts) escalates the ambiguous ones to a model.
+// Grounding without a ground-truth oracle. There is rarely a reliable real-time
+// source of truth, so this detects UNSUPPORTED rather than false: claims the
+// supplied sources do not back. Weaker, but checkable, and it maps to what an
+// enterprise actually controls. This tier is the cheap pre-filter; nli.ts is the
+// real check.
 
 const STOPWORDS = new Set([
   "the","a","an","and","or","but","if","then","than","that","this","these","those",
@@ -29,8 +24,8 @@ function contentTokens(s: string): string[] {
   return tokenize(s).filter((w) => !STOPWORDS.has(w) && w.length > 2);
 }
 
-// split into sentences so we can point at the exact unsupported claim rather
-// than saying "this answer is 62% grounded", which no reviewer can act on.
+// Sentence granularity so evidence can quote the exact claim. "62% grounded" is
+// not something a reviewer can act on.
 export function splitSentences(text: string): { text: string; start: number; end: number }[] {
   const out: { text: string; start: number; end: number }[] = [];
   const re = /[^.!?\n]+[.!?]*/g;
@@ -42,9 +37,8 @@ export function splitSentences(text: string): { text: string; start: number; end
   return out;
 }
 
-// claim-ish sentences are the ones worth checking. a greeting or a hedge is not
-// a factual assertion, and flagging it is exactly the over-flagging the brief
-// warns produces alert fatigue.
+// A greeting or a hedge is not a factual assertion, and flagging one is how a
+// queue fills with noise.
 const FACTUAL_MARKERS = /\b(is|are|was|were|has|have|will|must|can|cost|costs|charge|charges|refund|policy|days?|hours?|percent|%|rs\.?|₹|\$|guarantee|entitled|eligible|require[ds]?|allow(?:s|ed)?|within|up to|at least)\b/i;
 const NUMERIC = /\d/;
 
@@ -88,9 +82,8 @@ export interface ClaimCheck {
   unsupportedTerms: string[];
 }
 
-// how much of this claim's content appears in any single source?
-// numbers are weighted heavily: "refunds within 30 days" vs a source that says
-// 14 days is precisely the failure mode that cost Air Canada a tribunal ruling.
+// Numbers are weighted heavily: a figure the sources never mention is the
+// strongest cheap signal of fabrication available.
 export function checkClaim(claim: string, sources: GroundingSource[]): ClaimCheck {
   const claimTokens = contentTokens(claim);
   const claimNums = claim.match(/\d+(?:\.\d+)?/g) ?? [];
@@ -129,9 +122,8 @@ export const groundednessDetector: Detector = {
     const t0 = performance.now();
     const sources = input.sources ?? [];
 
-    // no sources supplied means we cannot verify anything. that is a real state
-    // and we report it as low-confidence rather than pretending the answer is
-    // fine -- the policy layer decides what to do with an unverifiable claim.
+    // Unverifiable is a real state, reported at low confidence rather than as a
+    // pass. The policy layer decides what an unverifiable claim is worth.
     if (sources.length === 0) {
       const claims = splitSentences(input.response).filter((s) => isCheckableClaim(s.text));
       if (claims.length === 0) return null;
@@ -161,8 +153,7 @@ export const groundednessDetector: Detector = {
     const latencyMs = performance.now() - t0;
     if (checks.length === 0) return null;
 
-    // score off the worst claim, not the average: one fabricated refund window
-    // in an otherwise perfect answer is still a fabricated refund window.
+    // Worst claim, not the average: one fabricated figure still misleads.
     const worst = checks.reduce((a, b) => (a.support < b.support ? a : b));
     const weak = checks.filter((c) => c.support < 0.55);
     const score = Math.min(1, Math.max(0, 1 - worst.support) * 0.9 + (weak.length > 1 ? 0.1 : 0));
@@ -179,8 +170,7 @@ export const groundednessDetector: Detector = {
       evidence.push({ kind: "metric", text: `Weakest claim support ${worst.support.toFixed(2)}`, value: worst.support });
     }
 
-    // lexical overlap is a proxy, not proof. mid-range scores are exactly where
-    // it's least reliable, so confidence dips there and the judge takes over.
+    // Least reliable in the mid range, so confidence dips there and tier 1 takes over.
     const confidence = score > 0.75 || score < 0.25 ? 0.7 : 0.4;
 
     return {

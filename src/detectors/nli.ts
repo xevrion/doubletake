@@ -3,17 +3,13 @@ import { severityOf } from "../policy/decide.ts";
 import { splitSentences, isCheckableClaim } from "./groundedness.ts";
 import { AutoTokenizer, AutoModelForSequenceClassification, env } from "@huggingface/transformers";
 
-// natural-language-inference grounding. this is the real hallucination check;
-// the lexical one in groundedness.ts is the sub-millisecond pre-filter.
+// NLI grounding: the real hallucination check.
 //
-// why NLI and not "ask a model if it's true": entailment gives us three distinct
-// states, and the difference between them is the difference between three
-// different actions:
-//   entailed      -> the sources back this claim         -> pass
-//   neutral       -> the sources don't mention it        -> unverified, hedge it
-//   contradiction -> the sources say otherwise           -> this is the bad one
-// collapsing those into one "hallucination score" throws away the signal that
-// tells a reviewer whether they're looking at a gap or a lie.
+// Entailment gives three states where a judge model gives a score, and the
+// difference between them maps onto different actions. Entailed passes;
+// unsupported means the sources are silent, which is often a knowledge-base gap;
+// contradicted means the sources say otherwise, which is the serious one.
+// Collapsing them into one score loses exactly what a reviewer needs.
 
 env.cacheDir = "./data/models";
 env.allowRemoteModels = true;
@@ -28,14 +24,13 @@ type Nli = {
 
 let nliPromise: Promise<Nli> | null = null;
 
-// one shared load, kicked off at boot by warmNli(). a request must never be the
-// thing that triggers a 7-second model download.
+// Loaded once at boot. A request must never trigger the 7-second cold start.
 export function warmNli(): Promise<Nli> {
   if (!nliPromise) {
     nliPromise = (async () => {
       const tokenizer = await AutoTokenizer.from_pretrained(MODEL_ID);
       const model = await AutoModelForSequenceClassification.from_pretrained(MODEL_ID, { dtype: "q8" });
-      // label order differs between NLI repos, so read it rather than assume it.
+      // Label order differs between NLI repos.
       const id2label: Record<string, string> = (model as any).config?.id2label ?? {};
       const idx = { contradiction: 0, entailment: 1, neutral: 2 };
       for (const [k, v] of Object.entries(id2label)) {
@@ -73,8 +68,7 @@ export interface Entailment {
 
 export async function entail(premise: string, hypothesis: string): Promise<Entailment> {
   const { tokenizer, model, idx } = await warmNli();
-  // the pair API, not the zero-shot pipeline: we need explicit control over
-  // which side is the source and which is the claim.
+  // Pair API, not the zero-shot pipeline: premise and hypothesis must be explicit.
   const inputs = await tokenizer(premise, { text_pair: hypothesis });
   const out = await model(inputs);
   const logits = out.logits.tolist()[0] as number[];
@@ -86,13 +80,12 @@ export async function entail(premise: string, hypothesis: string): Promise<Entai
   };
 }
 
-// sources get chunked so a long document doesn't dilute the one sentence that
-// actually addresses the claim.
+// Chunked so a long document cannot dilute the sentence that addresses the claim.
 export function chunkSource(src: GroundingSource, sentencesPerChunk = 3): { id: string; text: string }[] {
   const sents = splitSentences(src.text).map((s) => s.text);
   if (sents.length <= sentencesPerChunk) return [{ id: src.id, text: src.text }];
   const chunks: { id: string; text: string }[] = [];
-  // overlapping window: a claim spanning a chunk boundary still finds support.
+  // Overlapping, so a claim spanning a boundary still finds its support.
   for (let i = 0; i < sents.length; i += sentencesPerChunk - 1) {
     const text = sents.slice(i, i + sentencesPerChunk).join(" ");
     if (text.trim()) chunks.push({ id: `${src.id}#${chunks.length}`, text });
@@ -126,15 +119,13 @@ export async function verifyClaims(response: string, sources: GroundingSource[])
 
     for (const chunk of chunks) {
       const e = await entail(chunk.text, c.text);
-      // a claim only needs ONE passage to support it, so we take the max
-      // entailment rather than averaging across chunks.
+      // One supporting passage is enough, so max rather than mean.
       if (e.entailment > bestEnt) {
         bestEnt = e.entailment;
         bestId = chunk.id;
         bestText = chunk.text;
       }
-      // contradiction is tracked separately: being contradicted by any source
-      // is serious even if a different source happens to support you.
+      // Tracked separately: contradiction by any source matters even if another agrees.
       if (e.contradiction > bestContra) bestContra = e.contradiction;
     }
 
@@ -168,8 +159,7 @@ export const nliDetector: Detector = {
     const contradicted = claims.filter((c) => c.verdict === "contradicted");
     const unsupported = claims.filter((c) => c.verdict === "unsupported");
 
-    // a contradiction is categorically worse than a gap, and the score has to
-    // reflect that or the policy ladder can't tell them apart.
+    // A contradiction is categorically worse than a gap.
     let score: number;
     if (contradicted.length > 0) {
       score = Math.min(1, 0.75 + Math.max(...contradicted.map((c) => c.contradiction)) * 0.25);

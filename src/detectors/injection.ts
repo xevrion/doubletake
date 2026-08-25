@@ -1,13 +1,9 @@
 import type { Detector, DetectorInput, Finding, Evidence } from "../policy/types.ts";
 import { severityOf } from "../policy/decide.ts";
 
-// prompt-injection and instruction-leak detection, tier 0.
-//
-// two things to catch, and they're different problems:
-//   1. the incoming prompt trying to hijack the model ("ignore previous...")
-//   2. the outgoing response showing signs it WAS hijacked (system prompt
-//      leakage, sudden persona break, refusal-override language)
-// (2) matters more for a checker that sits on the response side.
+// Prompt injection and instruction leaks. Two different problems: a prompt trying
+// to hijack the model, and a response showing signs that one succeeded. The second
+// matters more here, because it means something already got through.
 
 interface Pattern {
   label: string;
@@ -28,7 +24,6 @@ const PATTERNS: Pattern[] = [
   { label: "encoded-payload", weight: 0.55, side: "prompt",
     re: /\b(?:base64|rot13|hex\s*decode)\b[\s\S]{0,40}[A-Za-z0-9+/]{40,}={0,2}/i },
 
-  // response-side: the model spilling its own configuration.
   { label: "system-prompt-leak", weight: 0.9, side: "response",
     re: /\b(?:my\s+system\s+prompt\s+(?:is|says)|i\s+(?:was|am)\s+instructed\s+to|my\s+(?:initial|original)\s+instructions?\s+(?:are|were|say))\b/i },
   { label: "guardrail-bypass-admission", weight: 0.85, side: "response",
@@ -46,8 +41,7 @@ export const injectionDetector: Detector = {
     const evidence: Evidence[] = [];
     let score = 0;
 
-    // multi-turn: an injection planted three turns ago still shapes this answer,
-    // so we scan recent history too. the brief calls this compounding risk.
+    // An injection planted three turns ago still shapes this answer.
     const priorUser = (input.history ?? []).filter((t) => t.role === "user").slice(-3).map((t) => t.content).join("\n");
     const promptText = `${priorUser}\n${input.prompt}`;
 
@@ -55,7 +49,6 @@ export const injectionDetector: Detector = {
       const target = p.side === "response" ? input.response : p.side === "prompt" ? promptText : `${promptText}\n${input.response}`;
       const m = p.re.exec(target);
       if (!m) continue;
-      // a response-side hit is worse: it means something already got through.
       const w = p.side === "response" ? p.weight : p.weight * 0.85;
       score = Math.max(score, w);
       evidence.push({
@@ -68,7 +61,6 @@ export const injectionDetector: Detector = {
     const latencyMs = performance.now() - t0;
     if (evidence.length === 0) return null;
 
-    // several independent patterns firing together is a stronger signal.
     if (evidence.length > 1) score = Math.min(1, score + 0.08);
 
     const responseSide = evidence.some((e) => e.text.includes("(response)"));
@@ -77,8 +69,7 @@ export const injectionDetector: Detector = {
       categories: responseSide ? ["injection", "safety"] : ["injection"],
       score,
       severity: severityOf(score),
-      // pattern matching catches known shapes; novel phrasings slip past, and
-      // we'd rather say so than overstate what a regex can know.
+      // Known shapes only; novel phrasings slip past. Defence in depth, not a solve.
       confidence: responseSide ? 0.8 : 0.6,
       evidence: evidence.slice(0, 6),
       latencyMs,

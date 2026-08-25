@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-08-25T08:04:51.760Z",
+  "generatedAt": "2026-08-25T08:13:34.264Z",
   "cases": 15,
   "precision": 1,
   "recall": 1,
   "f1": 1,
   "fpr": 0,
   "exactAgreement": 11,
-  "latencyP50": 0.7,
-  "latencyP95": 758.2
+  "latencyP50": 0.6,
+  "latencyP95": 650.3
 }

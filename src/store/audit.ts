@@ -2,13 +2,10 @@ import type { Action, Finding, RiskCategory } from "../policy/types.ts";
 import type { Decision } from "../policy/decide.ts";
 import type { Profile } from "../policy/profiles.ts";
 
-// the audit trail. EU AI Act art. 12 wants automatically generated logs over the
-// system's lifetime; art. 14 wants evidence that human oversight was possible and
-// exercised. so every record has to answer, on its own: what came in, what the
-// checkers said, what we did, who overrode it, and when.
-//
-// stored in sqlite via bun's built-in driver -- no external db to install, and
-// the file is a real artifact a judge can open.
+// The audit trail. EU AI Act art. 12 wants automatic logs over a system's
+// lifetime and art. 14 wants evidence that human oversight was exercised, so
+// every record answers on its own: what came in, what the checkers said, what we
+// did, who overrode it, and when.
 
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
@@ -19,9 +16,8 @@ export interface AuditRecord {
   profileId: string;
   jurisdiction: string;
   model: string;
-  // we store a hash of the prompt/response by default and the text only when
-  // the profile allows it. the audit log must not become the biggest PII spill
-  // in the company.
+  // Hash plus a truncated preview. A verbatim log would become the largest
+  // personal-data store in the company.
   promptHash: string;
   responseHash: string;
   promptPreview: string;
@@ -37,7 +33,6 @@ export interface AuditRecord {
   latencyMs: number;
   costUsd: number;
   savedUsd: number;
-  // feedback loop: what a human said about our decision, and why.
   override?: Override;
   retentionUntil: number;
 }
@@ -48,7 +43,7 @@ export interface Override {
   from: Action;
   to: Action;
   reason: string;
-  // the label a reviewer gives us is the training signal for threshold tuning.
+  // The reviewer's label is the only ground truth the system receives.
   verdict: "true-positive" | "false-positive" | "false-negative" | "unclear";
 }
 
@@ -146,8 +141,7 @@ export function getAudit(id: string): AuditRecord | null {
   return row ? rowToRecord(row) : null;
 }
 
-// retention enforcement, per profile. GDPR/DPDP storage limitation is a real
-// obligation and "we kept everything forever" is the wrong answer in an audit.
+// Per-profile retention. "We kept everything" is the wrong answer in an audit.
 export function purgeExpired(now = Date.now()): number {
   return getDb().query(`DELETE FROM audit WHERE retention_until < ?`).run(now).changes;
 }
