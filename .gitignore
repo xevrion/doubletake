@@ -4,6 +4,8 @@ dist/
 .env.local
 *.log
 data/*.db
+data/*.db-shm
+data/*.db-wal
 data/*.jsonl
 .DS_Store
 data/models/

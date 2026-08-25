@@ -11,7 +11,7 @@ import { makeCostDetector, routeModel, estimateCost, resetBudgets } from "../src
 import { warmNli, entail, verifyClaims } from "../src/detectors/nli.ts";
 import { warmToxicity, scoreToxicity } from "../src/detectors/toxicity-model.ts";
 import { check } from "../src/gateway/pipeline.ts";
-import { initAudit, recentAudits, recordOverride, getAudit, purgeExpired } from "../src/store/audit.ts";
+import { initAudit, getDb, recentAudits, recordOverride, getAudit, purgeExpired } from "../src/store/audit.ts";
 import { activeProvider, configuredProviders, failoverChain, complete } from "../src/gateway/upstream.ts";
 
 let pass = 0, fail = 0;
@@ -26,7 +26,14 @@ function section(t: string) { console.log(`\n${t}`); }
 
 const t0 = performance.now();
 console.log("DoubleTake self check");
-initAudit("data/selfcheck.db");
+
+// A scratch database, removed on the way out. The check must not leave state
+// behind that a later run, or a reviewer's clone, would trip over.
+const DB = "data/selfcheck.db";
+for (const suffix of ["", "-shm", "-wal"]) {
+  try { await Bun.file(DB + suffix).delete(); } catch { /* first run */ }
+}
+initAudit(DB);
 
 section("Policy layer");
 const profiles = listProfiles();
@@ -162,6 +169,12 @@ ok("a degraded call is labelled, never disguised",
   gen.degraded ?? "live call");
 
 console.log(`\n${pass} passed, ${fail} failed, ${((performance.now() - t0) / 1000).toFixed(1)}s`);
+
+getDb().close();
+for (const suffix of ["", "-shm", "-wal"]) {
+  try { await Bun.file(DB + suffix).delete(); } catch { /* already gone */ }
+}
+
 if (fail > 0) {
   console.log(`\nfailed: ${failures.join(", ")}`);
   process.exit(1);
