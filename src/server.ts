@@ -4,6 +4,8 @@ import { check } from "./gateway/pipeline.ts";
 import { listProfiles, getProfile } from "./policy/profiles.ts";
 import { initAudit, recentAudits, getAudit, recordOverride, purgeExpired, type Override } from "./store/audit.ts";
 import { warmNli } from "./detectors/nli.ts";
+import { warmToxicity } from "./detectors/toxicity-model.ts";
+import { initRecall, recentCorrections, verifyLate } from "./gateway/recall.ts";
 import { PRICES, routeModel, estimateCost, estimateTokens } from "./detectors/cost.ts";
 import { complete, activeProvider, configuredProviders, providers } from "./gateway/upstream.ts";
 
@@ -192,6 +194,20 @@ app.post("/api/route", async (c) => {
   });
 });
 
+app.get("/api/corrections", (c) => c.json({ items: recentCorrections(25) }));
+
+// force a late check on demand, so the demo can show recall-and-correct without
+// waiting for the sampler to pick a request.
+app.post("/api/recall/:id", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const correction = await verifyLate(c.req.param("id"), {
+    prompt: String(body.prompt ?? ""), response: String(body.response ?? ""),
+    profileId: String(body.profileId ?? "support-bot"),
+    sources: Array.isArray(body.sources) ? body.sources : undefined,
+  });
+  return c.json({ corrected: !!correction, correction });
+});
+
 app.post("/api/purge", (c) => c.json({ purged: purgeExpired() }));
 
 app.use("/*", serveStatic({ root: "./web" }));
@@ -199,9 +215,12 @@ app.use("/*", serveStatic({ root: "./web" }));
 const port = Number(process.env.PORT ?? 3000);
 
 initAudit();
+initRecall();
 console.log("warming detector models...");
 const t0 = performance.now();
-await warmNli();
+// both are loaded before the first request; a 7-second cold start belongs at
+// boot, never in a user's request path.
+await Promise.all([warmNli(), warmToxicity()]);
 console.log(`models ready in ${((performance.now() - t0) / 1000).toFixed(1)}s`);
 console.log(`DoubleTake listening on http://localhost:${port}`);
 

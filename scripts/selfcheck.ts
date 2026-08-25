@@ -9,6 +9,7 @@ import { injectionDetector } from "../src/detectors/injection.ts";
 import { toxicityDetector } from "../src/detectors/toxicity.ts";
 import { makeCostDetector, routeModel, estimateCost, resetBudgets } from "../src/detectors/cost.ts";
 import { warmNli, entail, verifyClaims } from "../src/detectors/nli.ts";
+import { warmToxicity, scoreToxicity } from "../src/detectors/toxicity-model.ts";
 import { check } from "../src/gateway/pipeline.ts";
 import { initAudit, recentAudits, recordOverride, getAudit, purgeExpired } from "../src/store/audit.ts";
 import { activeProvider, configuredProviders, failoverChain, complete } from "../src/gateway/upstream.ts";
@@ -93,6 +94,13 @@ const clean = await toxicityDetector.run({
   prompt: "assess", response: "The applicant has a clean repayment history.", profileId: "decision-support",
 });
 ok("a neutral sentence is not flagged", clean === null);
+
+section("Safety model (tier 1)");
+await warmToxicity();
+const toxHit = await scoreToxicity("You are worthless and everyone hates you.");
+ok("toxic-bert flags overt abuse", (toxHit["toxic"] ?? 0) > 0.9, `toxic ${(toxHit["toxic"] ?? 0).toFixed(2)}`);
+const toxClean = await scoreToxicity("The applicant has a clean repayment history.");
+ok("toxic-bert stays quiet on business prose", Object.values(toxClean).every((v) => v < 0.5));
 
 section("Cost and routing");
 resetBudgets();

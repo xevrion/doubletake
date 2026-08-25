@@ -7,8 +7,10 @@ import { injectionDetector } from "../detectors/injection.ts";
 import { toxicityDetector } from "../detectors/toxicity.ts";
 import { makeCostDetector } from "../detectors/cost.ts";
 import { writeAudit, sha256, type AuditRecord } from "../store/audit.ts";
+import { verifyLate } from "./recall.ts";
 import { judgeDetector } from "../detectors/judge.ts";
 import { nliDetector, isNliReady } from "../detectors/nli.ts";
+import { toxicityModelDetector, isToxicityReady } from "../detectors/toxicity-model.ts";
 
 // the request path. the whole design goal is that the inline part stays inside
 // the profile's latency budget, so:
@@ -108,6 +110,7 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
   // that latency (decision-support, agent-ops). otherwise it is sampled and
   // runs after the response has already gone out.
   let asyncPending = false;
+  let sampledForAsync = false;
   if (profile.maxInlineTier >= 1 && !refusal) {
     const remaining = profile.latencyBudgetMs - (performance.now() - t0);
     if (remaining > 150) {
@@ -121,12 +124,22 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
       // and 800ms, which is what happened before this line was fixed.
       const hasSources = (req.sources?.length ?? 0) > 0;
       const tier1 = hasSources ? nliDetector : judgeDetector;
-      const jf = await runGuarded(tier1, input, remaining);
-      if (jf) findings.push(jf);
+
+      // the model-based safety check runs alongside the grounding one, not
+      // after it: they look at different things and there is no reason to pay
+      // for them serially. the lexicon has already run at tier 0; whichever
+      // scores higher wins, because the two miss in different directions.
+      const [grounding, toxModel] = await Promise.all([
+        runGuarded(tier1, input, remaining),
+        isToxicityReady() ? runGuarded(toxicityModelDetector, input, remaining) : Promise.resolve(null),
+      ]);
+      if (grounding) findings.push(grounding);
+      if (toxModel) findings.push(toxModel);
     } else {
       asyncPending = true;
     }
   } else if (Math.random() < profile.asyncSampleRate) {
+    sampledForAsync = true;
     // fire-and-forget: the user already has their answer. if this comes back
     // hot, the recall path (see server.ts) marks the record and can notify.
     asyncPending = true;
@@ -190,6 +203,15 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
     retentionUntil: Date.now() + profile.retentionDays * 86400_000,
   };
   writeAudit(record);
+
+  // fire-and-forget the deep check for sampled traffic. the caller already has
+  // its answer; if this comes back worse than what we decided inline, it emits
+  // a correction against this record id.
+  if (sampledForAsync) {
+    queueMicrotask(() => {
+      verifyLate(id, req).catch(() => { /* late checks are best effort */ });
+    });
+  }
 
   return {
     id,
