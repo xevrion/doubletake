@@ -5,12 +5,56 @@ import { listProfiles, getProfile } from "./policy/profiles.ts";
 import { initAudit, recentAudits, getAudit, recordOverride, purgeExpired, type Override } from "./store/audit.ts";
 import { warmNli } from "./detectors/nli.ts";
 import { PRICES, routeModel, estimateCost, estimateTokens } from "./detectors/cost.ts";
+import { complete, activeProvider, configuredProviders, providers } from "./gateway/upstream.ts";
 
 const app = new Hono();
 
 app.get("/api/health", (c) => c.json({ ok: true, service: "doubletake" }));
 
 app.get("/api/profiles", (c) => c.json({ profiles: listProfiles() }));
+
+app.get("/api/providers", (c) => c.json({
+  active: activeProvider().id,
+  configured: configuredProviders().map((p) => ({ id: p.id, label: p.label, model: p.model, note: p.note })),
+  all: providers().map((p) => ({ id: p.id, label: p.label, model: p.model, free: p.free, note: p.note, ready: p.id === "mock" || p.id === "ollama" || !!p.apiKey })),
+}));
+
+// the end-to-end path: ask a real model, then check what it said before the
+// answer is allowed out. this is the whole product in one request.
+app.post("/api/ask", async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body?.prompt) return c.json({ error: "field 'prompt' is required" }, 400);
+
+  const sources = Array.isArray(body.sources) ? body.sources : [];
+  const profileId = String(body.profileId ?? "support-bot");
+
+  const gen = await complete(String(body.prompt), { sources, system: body.system });
+
+  // cost side: what a frontier model would have cost for the same work.
+  const baseline = "claude-class-frontier";
+  const baselineCost = estimateCost(baseline, gen.usage.promptTokens, gen.usage.completionTokens);
+  const savedUsd = Math.max(0, baselineCost - gen.usage.costUsd);
+
+  const result = await check({
+    prompt: String(body.prompt),
+    response: gen.text,
+    profileId,
+    sources,
+    history: Array.isArray(body.history) ? body.history : undefined,
+    usage: gen.usage,
+    savedUsd,
+  });
+
+  return c.json({
+    ...result,
+    generation: {
+      provider: gen.provider,
+      model: gen.usage.model,
+      wallMs: Number(gen.wallMs.toFixed(1)),
+      degraded: gen.degraded ?? null,
+    },
+  });
+});
 
 // the main entry point: hand it a prompt + response and it comes back with a
 // decision. an enterprise would put this behind its existing llm client, which
