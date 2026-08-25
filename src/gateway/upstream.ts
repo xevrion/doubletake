@@ -8,6 +8,11 @@ import { estimateCost, estimateTokens } from "../detectors/cost.ts";
 // the pitch: an enterprise consuming a foundation model via api can put this
 // layer in front of whatever they already use, without re-plumbing.
 
+const ENV_FOR: Partial<Record<string, string>> = {
+  groq: "GROQ_API_KEY", gemini: "GEMINI_API_KEY",
+  cerebras: "CEREBRAS_API_KEY", openrouter: "OPENROUTER_API_KEY",
+};
+
 export type ProviderId = "groq" | "gemini" | "cerebras" | "openrouter" | "ollama" | "mock";
 
 export interface ProviderConfig {
@@ -33,26 +38,47 @@ function env(k: string, fallback = ""): string {
   return (process.env[k] ?? fallback).trim();
 }
 
+// a provider key can be a comma-separated list. free tiers are rate-limited per
+// key, so rotating across a few keys is the difference between a demo that
+// survives rehearsal loops and one that starts returning 429 halfway through.
+function keys(k: string): string[] {
+  return env(k).split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+const keyCursor = new Map<string, number>();
+
+export function nextKey(envName: string): string | undefined {
+  const pool = keys(envName);
+  if (pool.length === 0) return undefined;
+  const i = keyCursor.get(envName) ?? 0;
+  keyCursor.set(envName, (i + 1) % pool.length);
+  return pool[i];
+}
+
+export function keyCount(envName: string): number {
+  return keys(envName).length;
+}
+
 export function providers(): ProviderConfig[] {
   return [
     {
       id: "groq", label: "Groq", model: env("GROQ_MODEL", "llama-3.3-70b-versatile"),
-      baseUrl: "https://api.groq.com/openai/v1", apiKey: env("GROQ_API_KEY"), free: true,
+      baseUrl: "https://api.groq.com/openai/v1", apiKey: keys("GROQ_API_KEY")[0] ?? "", free: true,
       note: "30 req/min, 1k/day. No logprobs support.",
     },
     {
       id: "gemini", label: "Google AI Studio", model: env("GEMINI_MODEL", "gemini-2.0-flash"),
-      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", apiKey: env("GEMINI_API_KEY"), free: true,
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", apiKey: keys("GEMINI_API_KEY")[0] ?? "", free: true,
       note: "~15 req/min, 1k/day.",
     },
     {
       id: "cerebras", label: "Cerebras", model: env("CEREBRAS_MODEL", "llama3.1-8b"),
-      baseUrl: "https://api.cerebras.ai/v1", apiKey: env("CEREBRAS_API_KEY"), free: true,
+      baseUrl: "https://api.cerebras.ai/v1", apiKey: keys("CEREBRAS_API_KEY")[0] ?? "", free: true,
       note: "~5 req/min, 1M tokens/day.",
     },
     {
       id: "openrouter", label: "OpenRouter", model: env("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free"),
-      baseUrl: "https://openrouter.ai/api/v1", apiKey: env("OPENROUTER_API_KEY"), free: true,
+      baseUrl: "https://openrouter.ai/api/v1", apiKey: keys("OPENROUTER_API_KEY")[0] ?? "", free: true,
       note: "~20 req/min, 50/day on free models.",
     },
     {
@@ -103,11 +129,41 @@ function mockReply(prompt: string): string {
     ?? "I can help with that. Our standard processing time is 3 to 5 business days and there is no additional charge.";
 }
 
+// failover chain: every configured provider, active one first, mock last.
+// free tiers have small daily quotas and rate limits, so a live demo that
+// depends on exactly one of them is a demo that fails on stage. this is the
+// same argument the product makes about not depending on a single model vendor.
+export function failoverChain(): ProviderConfig[] {
+  const active = activeProvider();
+  const rest = configuredProviders().filter((p) => p.id !== active.id && p.id !== "mock");
+  const mock = providers().find((p) => p.id === "mock")!;
+  return [active, ...rest, mock].filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
+}
+
 export async function complete(
   prompt: string,
   opts: { system?: string; sources?: { id: string; text: string }[]; provider?: ProviderConfig } = {},
 ): Promise<Completion> {
-  const p = opts.provider ?? activeProvider();
+  // an explicitly requested provider is used alone; otherwise walk the chain.
+  if (!opts.provider) {
+    const chain = failoverChain();
+    const tried: string[] = [];
+    for (const candidate of chain) {
+      const out = await completeWith(candidate, prompt, opts);
+      if (!out.degraded) {
+        return tried.length ? { ...out, degraded: `Fell back to ${candidate.label} after: ${tried.join("; ")}` } : out;
+      }
+      tried.push(out.degraded);
+    }
+  }
+  return completeWith(opts.provider ?? activeProvider(), prompt, opts);
+}
+
+async function completeWith(
+  p: ProviderConfig,
+  prompt: string,
+  opts: { system?: string; sources?: { id: string; text: string }[] } = {},
+): Promise<Completion> {
   const t0 = performance.now();
 
   if (p.id === "mock") {
@@ -129,7 +185,7 @@ export async function complete(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${p.apiKey}`,
+        authorization: `Bearer ${ENV_FOR[p.id] ? (nextKey(ENV_FOR[p.id]!) ?? p.apiKey) : p.apiKey}`,
       },
       body: JSON.stringify({
         model: p.model,
