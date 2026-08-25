@@ -137,7 +137,10 @@ export function failoverChain(): ProviderConfig[] {
   const active = activeProvider();
   const rest = configuredProviders().filter((p) => p.id !== active.id && p.id !== "mock");
   const mock = providers().find((p) => p.id === "mock")!;
-  return [active, ...rest, mock].filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
+  const chain = [active, ...rest].filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
+  // The offline mock always terminates the chain, even when it is also the
+  // active provider: every other entry can fail, and the last hop must not.
+  return [...chain.filter((p) => p.id !== "mock"), mock];
 }
 
 export async function complete(
