@@ -1,6 +1,6 @@
 import type { Detector, DetectorInput, Finding, Evidence } from "../policy/types.ts";
 import { severityOf } from "../policy/decide.ts";
-import { splitSentences, isCheckableClaim } from "./groundedness.ts";
+import { splitSentences, isCheckableClaim, normalise } from "./groundedness.ts";
 
 // tier 1: a second model reviews the first model's answer.
 //
@@ -84,11 +84,11 @@ function clamp01(n: number): number {
 // numeric contradiction, not just absence) but clearly labelled as a stub.
 function offlineVerdict(response: string, sources: string): JudgeVerdict {
   const claims = splitSentences(response).filter((s) => isCheckableClaim(s.text));
-  const srcNums = new Set(sources.match(/\d+(?:\.\d+)?/g) ?? []);
+  const srcNums = new Set(normalise(sources).match(/\d+(?:\.\d+)?/g) ?? []);
   const contradicted: string[] = [];
 
   for (const c of claims) {
-    const nums = c.text.match(/\d+(?:\.\d+)?/g) ?? [];
+    const nums = normalise(c.text).match(/\d+(?:\.\d+)?/g) ?? [];
     // a number stated in the answer that the sources never mention, when the
     // sources DO talk in numbers, is the contradiction signature.
     if (nums.length > 0 && srcNums.size > 0 && nums.every((n) => !srcNums.has(n))) {

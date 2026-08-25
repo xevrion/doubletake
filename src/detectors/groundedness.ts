@@ -16,8 +16,21 @@ const STOPWORDS = new Set([
   "please","thanks","hello","hi","sure","there","here","what","when","where","which",
 ]);
 
+// Models emit typographic punctuation freely: non-breaking hyphens, smart
+// quotes, en dashes. Left alone, "non\u2011refundable" tokenises as two unknown
+// words and a correct answer reads as unsupported, so everything is folded to
+// ASCII equivalents before comparison.
+export function normalise(s: string): string {
+  return s
+    .normalize("NFKC")
+    .replace(/[\u2010-\u2015\u2212]/g, "-")   // hyphens, dashes, minus
+    .replace(/[\u2018\u2019\u201B\u02BC]/g, "'") // single quotes
+    .replace(/[\u201C\u201D\u201F]/g, '"')     // double quotes
+    .replace(/[\u00A0\u2007\u202F\u2009]/g, " "); // non-breaking and thin spaces
+}
+
 function tokenize(s: string): string[] {
-  return s.toLowerCase().match(/[a-z0-9][a-z0-9'-]*/g) ?? [];
+  return normalise(s).toLowerCase().match(/[a-z0-9][a-z0-9'-]*/g) ?? [];
 }
 
 function contentTokens(s: string): string[] {
@@ -86,14 +99,14 @@ export interface ClaimCheck {
 // strongest cheap signal of fabrication available.
 export function checkClaim(claim: string, sources: GroundingSource[]): ClaimCheck {
   const claimTokens = contentTokens(claim);
-  const claimNums = claim.match(/\d+(?:\.\d+)?/g) ?? [];
+  const claimNums = normalise(claim).match(/\d+(?:\.\d+)?/g) ?? [];
   let best = 0;
   let bestId: string | undefined;
   let bestMissing: string[] = [];
 
   for (const src of sources) {
     const srcTokenSet = new Set(contentTokens(src.text));
-    const srcNums = new Set(src.text.match(/\d+(?:\.\d+)?/g) ?? []);
+    const srcNums = new Set(normalise(src.text).match(/\d+(?:\.\d+)?/g) ?? []);
 
     const missing = claimTokens.filter((t) => !srcTokenSet.has(t));
     const lexical = claimTokens.length === 0 ? 0 : 1 - missing.length / claimTokens.length;
