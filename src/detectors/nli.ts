@@ -52,6 +52,12 @@ export function isNliReady(): boolean {
   return nliPromise !== null;
 }
 
+// the model is loaded lazily on first use anyway; this just makes the intent
+// explicit at the call site.
+export function ensureNli(): Promise<unknown> {
+  return warmNli();
+}
+
 function softmax(xs: number[]): number[] {
   const max = Math.max(...xs);
   const exps = xs.map((x) => Math.exp(x - max));
@@ -172,7 +178,11 @@ export const nliDetector: Detector = {
     } else {
       score = 0.05;
     }
-    if (score < 0.15) return null;
+
+    // NOTE: a clean verdict is still a verdict, and it must be reported.
+    // returning null here would leave the crude lexical pre-filter as the only
+    // grounding signal in the decision, which is how a fully entailed answer
+    // ended up escalated to a human in the golden set.
 
     const evidence: Evidence[] = [
       ...contradicted.slice(0, 3).map((c): Evidence => ({
@@ -194,8 +204,9 @@ export const nliDetector: Detector = {
       score,
       severity: severityOf(score),
       // a confident contradiction is a strong, trustworthy signal. a pile of
-      // "unsupported" is weaker: the sources may simply be incomplete.
-      confidence: contradicted.length > 0 ? 0.85 : 0.6,
+      // "unsupported" is weaker: the sources may simply be incomplete. a clean
+      // sweep where every claim is entailed is trustworthy too.
+      confidence: contradicted.length > 0 ? 0.85 : unsupported.length === 0 ? 0.8 : 0.6,
       evidence,
       latencyMs,
       tier: 1,

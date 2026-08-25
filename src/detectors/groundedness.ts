@@ -55,12 +55,22 @@ const NUMERIC = /\d/;
 // to a human in the golden set.
 const IDENTIFIER_ECHO = /\b(?:order|invoice|txn|transaction|reference|ref|tracking|awb|ticket|booking|receipt|case|shipment|policy)\s*(?:no\.?|number|id|#)?\s*[:#-]?\s*[A-Z0-9-]{5,}/i;
 
+// a refusal is the model working correctly, not making a claim. flagging
+// "I can't share that" as an unverified assertion punishes exactly the
+// behaviour we want, and it fires constantly against well-aligned models.
+const REFUSAL = /\b(?:i(?:'m| am)?\s*(?:sorry|afraid)|i\s*(?:can(?:'|no)?t|cannot|won'?t|am\s+unable\s+to|don'?t\s+have\s+(?:access|that))|unable\s+to\s+(?:provide|share|assist)|not\s+able\s+to\s+(?:provide|share)|i\s+do\s+not\s+have\s+(?:access|information))\b/i;
+
+export function isRefusal(text: string): boolean {
+  return REFUSAL.test(text);
+}
+
 export function isCheckableClaim(sentence: string): boolean {
   const words = tokenize(sentence);
   if (words.length < 4) return false;
   // questions and explicit hedges aren't assertions of fact.
   if (/\?\s*$/.test(sentence)) return false;
   if (/\b(i think|might be|may vary|please (?:check|confirm|contact)|i'?m not sure|cannot confirm)\b/i.test(sentence)) return false;
+  if (REFUSAL.test(sentence)) return false;
 
   // strip identifiers before deciding whether any real numeric claim remains.
   const withoutIds = sentence.replace(IDENTIFIER_ECHO, " ");

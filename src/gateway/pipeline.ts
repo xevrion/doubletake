@@ -2,7 +2,7 @@ import type { Detector, DetectorInput, Finding, TokenUsage } from "../policy/typ
 import { decide, type Decision } from "../policy/decide.ts";
 import { getProfile, type Profile } from "../policy/profiles.ts";
 import { piiDetector, scanPii, redactPii } from "../detectors/pii.ts";
-import { groundednessDetector } from "../detectors/groundedness.ts";
+import { groundednessDetector, isRefusal } from "../detectors/groundedness.ts";
 import { injectionDetector } from "../detectors/injection.ts";
 import { toxicityDetector } from "../detectors/toxicity.ts";
 import { makeCostDetector } from "../detectors/cost.ts";
@@ -86,10 +86,19 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
     history: req.history, profileId: profile.id, usage: req.usage,
   };
 
+  // a refusal short-circuits the grounding checks entirely. there is nothing to
+  // verify in "I can't help with that", and treating it as an unsupported claim
+  // means a well-behaved model gets escalated for declining -- which trains
+  // operators to ignore the queue.
+  const refusal = isRefusal(req.response) && req.response.length < 300;
+
   // tier 0, all at once. the slice each detector gets is the profile budget
   // minus a little headroom for the decision + audit write.
   const slice = Math.max(60, profile.latencyBudgetMs - 40);
-  const settled = await Promise.all(TIER0.map((d) => runGuarded(d, input, slice)));
+  const active = refusal
+    ? TIER0.filter((d) => !d.categories.includes("hallucination"))
+    : TIER0;
+  const settled = await Promise.all(active.map((d) => runGuarded(d, input, slice)));
   const findings: Finding[] = settled.filter((f): f is Finding => f !== null);
   const inlineMs = performance.now() - t0;
 
@@ -99,13 +108,19 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
   // that latency (decision-support, agent-ops). otherwise it is sampled and
   // runs after the response has already gone out.
   let asyncPending = false;
-  if (profile.maxInlineTier >= 1) {
+  if (profile.maxInlineTier >= 1 && !refusal) {
     const remaining = profile.latencyBudgetMs - (performance.now() - t0);
     if (remaining > 150) {
       // NLI first: it's local, ~60ms, and gives the three-state verdict. the
       // judge model is the fallback for when no sources were supplied at all,
       // since NLI has nothing to compare against in that case.
-      const tier1 = isNliReady() && (req.sources?.length ?? 0) > 0 ? nliDetector : judgeDetector;
+      // NLI whenever sources exist: it is local, ~20ms per claim, and returns
+      // the three-state verdict. isNliReady() only tells us whether the model
+      // has been warmed, not whether it CAN run -- warming on demand is far
+      // better than silently falling back to a network judge that costs money
+      // and 800ms, which is what happened before this line was fixed.
+      const hasSources = (req.sources?.length ?? 0) > 0;
+      const tier1 = hasSources ? nliDetector : judgeDetector;
       const jf = await runGuarded(tier1, input, remaining);
       if (jf) findings.push(jf);
     } else {
