@@ -206,9 +206,9 @@ let EVAL = { precision: 1.0, recall: 1.0, f1: 1.0, fpr: 0.0, cases: 15, generate
 
 async function loadTrust() {
   try {
-    const fresh = await fetch("/eval-results.json").then((r) => r.ok ? r.json() : null);
+    const fresh = await fetch("/eval-results.json", { cache: "no-store" }).then((r) => r.ok ? r.json() : null);
     if (fresh) EVAL = { ...EVAL, ...fresh };
-  } catch { /* fall back to the built-in defaults */ }
+  } catch { /* the committed defaults render fine if the file is missing */ }
 
   $("evalMetrics").innerHTML = [
     metric("Precision", num(EVAL.precision, 3), "flags that were real"),
