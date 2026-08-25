@@ -164,9 +164,9 @@ export function LiveCheck({
             {profile && (
               <div className="tabular mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
                 <span>{profile.latencyBudgetMs}ms budget</span>
-                <span>tier &le;{profile.maxInlineTier} inline</span>
+                <span>tier {profile.maxInlineTier} inline</span>
                 <span>{profile.jurisdiction.join("/")}</span>
-                <span>unsure &rarr; {profile.onUncertain}</span>
+                <span>unsure: {profile.onUncertain}</span>
               </div>
             )}
           </Field>

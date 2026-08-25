@@ -2,6 +2,7 @@ import { ACTIONS, ACTION_COPY, type Action } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { ChevronRight } from "lucide-react";
 
 const TONE: Record<Action, string> = {
   pass: "border-pass/40 bg-pass-soft", patch: "border-patch/40 bg-patch-soft",
@@ -112,7 +113,7 @@ function Step({ n, label, strong }: { n: string; label: string; strong?: boolean
 }
 
 function Arrow() {
-  return <span className="text-muted-foreground/50">&rarr;</span>;
+  return <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/50" aria-hidden />;
 }
 
 function Para({ title, children }: { title: string; children: React.ReactNode }) {

@@ -177,7 +177,7 @@ export const nliDetector: Detector = {
     const evidence: Evidence[] = [
       ...contradicted.slice(0, 3).map((c): Evidence => ({
         kind: "citation",
-        text: `CONTRADICTED (${(c.contradiction * 100).toFixed(0)}%): "${trunc(c.claim, 110)}" — sources say: "${trunc(c.bestChunkText ?? "", 110)}"`,
+        text: `CONTRADICTED (${(c.contradiction * 100).toFixed(0)}%): "${trunc(c.claim, 110)}". Sources say: "${trunc(c.bestChunkText ?? "", 110)}"`,
         start: c.start, end: c.end, sourceId: c.bestChunkId, value: c.contradiction,
       })),
       ...unsupported.slice(0, 3).map((c): Evidence => ({

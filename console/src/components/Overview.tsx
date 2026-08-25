@@ -130,7 +130,7 @@ export function Overview({ data }: { data: OverviewData }) {
                     <TableCell className="py-1.5"><ActionBadge action={r.action} /></TableCell>
                     <TableCell className="max-w-0 truncate py-1.5 text-[12px]">{r.prompt}</TableCell>
                     <TableCell className="tabular py-1.5 text-right text-[12px] text-muted-foreground">
-                      {r.topCategory ? r.maxScore.toFixed(2) : "—"}
+                      {r.topCategory ? r.maxScore.toFixed(2) : "n/a"}
                     </TableCell>
                     <TableCell className="tabular py-1.5 text-right text-[12px] text-muted-foreground">
                       {r.latencyMs.toFixed(0)}

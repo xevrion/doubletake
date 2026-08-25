@@ -50,7 +50,7 @@ export function Queue({ items, onChange }: { items: QueueItem[]; onChange: () =>
               <div className="flex flex-wrap items-center gap-2">
                 <ActionBadge action={i.action} />
                 <span className="tabular text-[11px] text-muted-foreground">
-                  {i.profileId} · {i.topCategory ?? "—"} {i.maxScore.toFixed(2)} · {new Date(i.ts).toLocaleTimeString()}
+                  {i.profileId} · {i.topCategory ?? "n/a"} {i.maxScore.toFixed(2)} · {new Date(i.ts).toLocaleTimeString()}
                 </span>
               </div>
               <dl className="mt-2 space-y-1 text-[12px] leading-relaxed">
@@ -160,10 +160,10 @@ export function Policies({ profiles }: { profiles: Profile[] }) {
             <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{p.description}</p>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               <Badge variant="outline" className="tabular px-1.5 py-0 text-[10px]">{p.latencyBudgetMs}ms</Badge>
-              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">tier &le;{p.maxInlineTier}</Badge>
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">tier {p.maxInlineTier} inline</Badge>
               <Badge variant="outline" className="tabular px-1.5 py-0 text-[10px]">{(p.asyncSampleRate * 100).toFixed(0)}% sampled</Badge>
               <Badge variant="outline" className="px-1.5 py-0 text-[10px]">{p.jurisdiction.join("/")}</Badge>
-              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">unsure &rarr; {p.onUncertain}</Badge>
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px]">unsure: {p.onUncertain}</Badge>
               <Badge variant="outline" className="tabular px-1.5 py-0 text-[10px]">{p.retentionDays}d retention</Badge>
               {p.agentic && (
                 <Badge className="bg-pause-soft px-1.5 py-0 text-[10px] text-pause hover:bg-pause-soft">

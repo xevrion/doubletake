@@ -134,7 +134,7 @@ regulated decision-support tool has 2.5 seconds and hard-blocks any
 protected-attribute reasoning. Profiles carry their own thresholds, jurisdiction,
 retention period, and what to do when a checker is unsure.
 
-| Profile | Budget | Uncertain → | Notes |
+| Profile | Budget | If unsure | Notes |
 |---|---|---|---|
 | `support-bot` | 250 ms | patch | public-facing, high volume |
 | `internal-copilot` | 400 ms | pass | staff can sanity-check output |

@@ -67,7 +67,7 @@ async function main() {
   const p50 = latencies[Math.floor(latencies.length * 0.5)] ?? 0;
   const p95 = latencies[Math.floor(latencies.length * 0.95)] ?? 0;
 
-  console.log("\nDoubleTake evaluation — golden set\n" + "=".repeat(78));
+  console.log("\nDoubleTake evaluation, golden set\n" + "=".repeat(78));
   for (const r of rows) console.log(r);
   console.log("=".repeat(78));
   console.log(`\nDetection (flag vs no-flag)`);

@@ -93,10 +93,10 @@ deployment a risk officer edits them without a redeploy.
 
 The four in the prototype span the range the brief describes.
 
-| Profile | Budget | Inline tier | Uncertain → | Hard block | Retention |
+| Profile | Budget | Inline tier | If unsure | Hard block | Retention |
 |---|---|---|---|---|---|
-| `support-bot` | 250 ms | 0 | patch | — | 180 d |
-| `internal-copilot` | 400 ms | 0 | pass | — | 90 d |
+| `support-bot` | 250 ms | 0 | patch | none | 180 d |
+| `internal-copilot` | 400 ms | 0 | pass | none | 90 d |
 | `decision-support` | 2500 ms | 1 | page | bias | 2555 d |
 | `agent-ops` | 1500 ms | 1 | pause | injection | 365 d |
 
@@ -157,8 +157,8 @@ latency, and cost. Prompts and responses are stored as a hash plus a truncated
 preview, because an audit log that captured everything verbatim would become the
 largest personal-data store in the company.
 
-Reviewer overrides are captured as structured verdicts — true positive, false
-positive, false negative, unclear — rather than free text, because those verdicts
+Reviewer overrides are captured as structured verdicts (true positive, false
+positive, false negative, unclear) rather than free text, because those verdicts
 are the only ground truth the system ever receives. `/api/tuning` reads them back
 and proposes threshold changes. It does not apply them: a guardrail that retunes
 itself without a human in the loop is a new risk, not a feature.
