@@ -1,0 +1,115 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* The palette is deliberately cool and desaturated so that the four action
+   colours are the only saturated thing on screen. Those four are the product;
+   everything else gets out of their way. */
+:root {
+  --radius: 0.5rem;
+
+  --background: oklch(0.99 0.002 265);
+  --foreground: oklch(0.21 0.012 265);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.21 0.012 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.21 0.012 265);
+  --primary: oklch(0.48 0.16 273);
+  --primary-foreground: oklch(0.99 0.002 265);
+  --secondary: oklch(0.96 0.004 265);
+  --secondary-foreground: oklch(0.28 0.012 265);
+  --muted: oklch(0.965 0.004 265);
+  --muted-foreground: oklch(0.53 0.014 265);
+  --accent: oklch(0.955 0.012 273);
+  --accent-foreground: oklch(0.35 0.09 273);
+  --destructive: oklch(0.55 0.19 26);
+  --border: oklch(0.92 0.005 265);
+  --input: oklch(0.92 0.005 265);
+  --ring: oklch(0.48 0.16 273);
+
+  /* The action ladder. Ordered by escalation, and the only place saturated
+     colour is permitted. */
+  --pass: oklch(0.52 0.13 155);
+  --patch: oklch(0.62 0.13 75);
+  --pause: oklch(0.60 0.16 45);
+  --page: oklch(0.55 0.19 26);
+  --pass-soft: oklch(0.95 0.03 155);
+  --patch-soft: oklch(0.96 0.04 85);
+  --pause-soft: oklch(0.96 0.04 50);
+  --page-soft: oklch(0.96 0.03 26);
+}
+
+.dark {
+  --background: oklch(0.16 0.008 270);
+  --foreground: oklch(0.95 0.005 265);
+  --card: oklch(0.20 0.010 270);
+  --card-foreground: oklch(0.95 0.005 265);
+  --popover: oklch(0.22 0.010 270);
+  --popover-foreground: oklch(0.95 0.005 265);
+  --primary: oklch(0.74 0.13 278);
+  --primary-foreground: oklch(0.18 0.012 270);
+  --secondary: oklch(0.26 0.011 270);
+  --secondary-foreground: oklch(0.93 0.005 265);
+  --muted: oklch(0.25 0.010 270);
+  --muted-foreground: oklch(0.66 0.014 268);
+  --accent: oklch(0.29 0.028 275);
+  --accent-foreground: oklch(0.86 0.06 278);
+  --destructive: oklch(0.66 0.17 24);
+  --border: oklch(0.28 0.012 270);
+  --input: oklch(0.30 0.012 270);
+  --ring: oklch(0.62 0.12 278);
+
+  --pass: oklch(0.72 0.15 155);
+  --patch: oklch(0.78 0.14 82);
+  --pause: oklch(0.72 0.16 48);
+  --page: oklch(0.68 0.17 24);
+  --pass-soft: oklch(0.28 0.05 155);
+  --patch-soft: oklch(0.30 0.05 82);
+  --pause-soft: oklch(0.29 0.06 48);
+  --page-soft: oklch(0.29 0.06 24);
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-pass: var(--pass);
+  --color-patch: var(--patch);
+  --color-pause: var(--pause);
+  --color-page: var(--page);
+  --color-pass-soft: var(--pass-soft);
+  --color-patch-soft: var(--patch-soft);
+  --color-pause-soft: var(--pause-soft);
+  --color-page-soft: var(--page-soft);
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  /* Numbers in tables and metrics must line up. */
+  .tabular { font-variant-numeric: tabular-nums; }
+}

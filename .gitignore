@@ -9,3 +9,7 @@ data/*.db-wal
 data/*.jsonl
 .DS_Store
 data/models/
+console/node_modules/
+web/assets/
+web/index.html
+data/eval-results.json

@@ -88,7 +88,7 @@ async function main() {
   }
   // write the headline numbers where the dashboard can read them, so the UI can
   // never drift from the last measured run.
-  await Bun.write("web/eval-results.json", JSON.stringify({
+  await Bun.write("data/eval-results.json", JSON.stringify({
     generatedAt: new Date().toISOString(),
     cases: cases.length,
     precision: Number(precision.toFixed(3)),

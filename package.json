@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "shadcn": "^4.19.0",
     "typescript": "^5.7.2"
   },
   "trustedDependencies": [
