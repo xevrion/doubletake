@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { Term, Why } from "./Explain";
 
 // Scenarios are ordered to walk a viewer down the ladder. "It flagged
 // something" convinces nobody; four different actions for four different
@@ -131,6 +132,11 @@ export function LiveCheck({
           <CardTitle className="text-sm">Request</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3.5">
+          <p className="text-[12px] leading-relaxed text-muted-foreground">
+            What the user asked, what the model wants to reply, and the{" "}
+            <Term k="grounding">grounding sources</Term> that reply should be true to. Edit any of
+            it, or pick a scenario below.
+          </p>
           <Field label="Scenario">
             <Select value={String(idx)} onValueChange={(v) => pick(Number(v))}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -198,13 +204,23 @@ export function LiveCheck({
         </CardHeader>
         <CardContent>
           {!result ? (
-            <p className="py-16 text-center text-sm text-muted-foreground">
-              Pick a scenario and run a check.
-            </p>
+            <div className="py-14 text-center">
+              <p className="text-sm text-muted-foreground">Pick a scenario and run a check.</p>
+              <p className="mx-auto mt-2 max-w-[46ch] text-[12px] leading-relaxed text-muted-foreground/80">
+                The scenarios are ordered so each one lands on a different action. Run them top to
+                bottom to see the whole ladder.
+              </p>
+            </div>
           ) : (
             <div className="space-y-4">
               <ActionLadder active={result.action} />
               <p className="text-[13px] leading-relaxed">{result.decision.rationale}</p>
+              {result.finalResponse !== result.originalResponse && (
+                <Why>
+                  The model wrote something different from what the user will see. The original is
+                  preserved in the audit record for whoever reviews it.
+                </Why>
+              )}
 
               <div className="tabular grid grid-cols-2 gap-x-6 gap-y-2 rounded-md border bg-muted/30 px-3.5 py-3 text-[12px] sm:grid-cols-4">
                 <Stat k="Latency" v={`${result.timing.totalMs.toFixed(0)}ms`}
@@ -224,6 +240,11 @@ export function LiveCheck({
               </Section>
 
               <Section title="Evidence">
+                <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">
+                  Each detector that fired, with its score, its{" "}
+                  <Term k="confidence">confidence</Term>, its <Term k="tier">tier</Term>, and the
+                  exact text it objected to.
+                </p>
                 {result.findings.length === 0 ? (
                   <p className="text-[12px] text-muted-foreground">No detector produced a finding.</p>
                 ) : (

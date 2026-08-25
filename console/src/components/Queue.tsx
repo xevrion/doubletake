@@ -4,6 +4,7 @@ import { ActionBadge } from "./ActionLadder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Term, Why } from "./Explain";
 
 export function Queue({ items, onChange }: { items: QueueItem[]; onChange: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -31,10 +32,15 @@ export function Queue({ items, onChange }: { items: QueueItem[]; onChange: () =>
     <Card>
       <CardHeader className="pb-3"><CardTitle className="text-sm">Held for human review</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-[13px] leading-relaxed text-muted-foreground">
-          Responses the gateway paused or escalated. A reviewer's verdict is the only ground truth
-          this system receives, so it feeds directly into threshold tuning.
+        <p className="max-w-[70ch] text-[13px] leading-relaxed text-muted-foreground">
+          Responses the gateway held back rather than sending. A person decides whether each one was
+          genuinely a problem.
         </p>
+        <Why>
+          These verdicts are the only ground truth the system ever receives. Nothing else can tell
+          it whether a flag was right, which is why the buttons ask for a reason and why the answers
+          feed straight into threshold tuning on the Trust metrics tab.
+        </Why>
 
         {items.length === 0 ? (
           <p className="py-12 text-center text-[13px] text-muted-foreground">Nothing held for review.</p>
@@ -90,12 +96,17 @@ export function Corrections({ items }: { items: Correction[] }) {
     <Card>
       <CardHeader className="pb-3"><CardTitle className="text-sm">Recall and correct</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-[13px] leading-relaxed text-muted-foreground">
-          A customer-facing profile cannot afford a judge model inline, so deep checks run after the
-          answer has gone out. When a late check disagrees with the inline decision, the gateway
-          issues a correction against the original response and records how long the unchecked
-          answer was live.
+        <p className="max-w-[70ch] text-[13px] leading-relaxed text-muted-foreground">
+          A fast <Term k="profile">profile</Term> cannot afford a deep check inline, so some checks
+          run after the answer has already gone out. When one of them disagrees with the inline
+          decision, the gateway issues a correction against that response, the way an email client
+          retracts a sent message.
         </p>
+        <Why>
+          Each entry records its <Term k="exposure">exposure window</Term>: how long the unchecked
+          answer was visible before the correction fired. That is the number a risk officer asks for
+          first, so the system measures it rather than hiding it.
+        </Why>
         {items.length === 0 ? (
           <p className="py-12 text-center text-[13px] text-muted-foreground">
             No corrections issued. Deep checks have agreed with every inline decision so far.
@@ -130,11 +141,16 @@ export function Policies({ profiles }: { profiles: Profile[] }) {
     <Card>
       <CardHeader className="pb-3"><CardTitle className="text-sm">Policy profiles</CardTitle></CardHeader>
       <CardContent className="space-y-3">
-        <p className="text-[13px] leading-relaxed text-muted-foreground">
+        <p className="max-w-[70ch] text-[13px] leading-relaxed text-muted-foreground">
           One gateway, four risk postures. The same response gets a different action depending on
           which use case produced it, which jurisdiction it falls under, and how much latency that
-          use case can afford. These are configuration, not code.
+          use case can afford.
         </p>
+        <Why>
+          These are configuration rather than code, so a risk officer can change a threshold without
+          a deploy. To see it work, run a scenario on Live check, switch the profile, and run the
+          identical text again.
+        </Why>
         {profiles.map((p) => (
           <div key={p.id} className="rounded-lg border px-3.5 py-3">
             <div className="flex flex-wrap items-baseline gap-2">
@@ -149,7 +165,11 @@ export function Policies({ profiles }: { profiles: Profile[] }) {
               <Badge variant="outline" className="px-1.5 py-0 text-[10px]">{p.jurisdiction.join("/")}</Badge>
               <Badge variant="outline" className="px-1.5 py-0 text-[10px]">unsure &rarr; {p.onUncertain}</Badge>
               <Badge variant="outline" className="tabular px-1.5 py-0 text-[10px]">{p.retentionDays}d retention</Badge>
-              {p.agentic && <Badge className="bg-pause-soft px-1.5 py-0 text-[10px] text-pause hover:bg-pause-soft">agentic</Badge>}
+              {p.agentic && (
+                <Badge className="bg-pause-soft px-1.5 py-0 text-[10px] text-pause hover:bg-pause-soft">
+                  <Term k="agentic">agentic</Term>
+                </Badge>
+              )}
               {p.hardBlock.length > 0 && (
                 <Badge className="bg-page-soft px-1.5 py-0 text-[10px] text-page hover:bg-page-soft">
                   hard block: {p.hardBlock.join(", ")}

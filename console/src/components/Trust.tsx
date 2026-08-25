@@ -4,6 +4,7 @@ import { Metric, MetricRow } from "./Metric";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Term, Why } from "./Explain";
 
 /** The golden set is small enough to show a zero false-positive rate.
  *  Projecting from zero would claim perfect precision at any prevalence, which
@@ -35,16 +36,17 @@ export function Trust() {
         </CardHeader>
         <CardContent className="space-y-5">
           <p className="text-[13px] leading-relaxed text-muted-foreground">
-            Measured by running every labelled case through the real gateway, not asserted.
-            Regenerate with <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">bun run eval</code>.
+            Every claim on this page is measured by running labelled test cases through the real
+            gateway, not asserted. Regenerate with{" "}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">bun run eval</code>.
           </p>
 
           {ev && (
             <MetricRow>
-              <Metric label="Precision" value={ev.precision.toFixed(3)} hint="flags that were real" />
-              <Metric label="Recall" value={ev.recall.toFixed(3)} hint="real issues caught" />
-              <Metric label="F1" value={ev.f1.toFixed(3)} hint="harmonic mean" />
-              <Metric label="False positives" value={ev.fpr.toFixed(3)} hint="clean answers flagged" />
+              <Metric label="Precision" value={ev.precision.toFixed(3)} hint="of flags, share that were real" />
+              <Metric label="Recall" value={ev.recall.toFixed(3)} hint="of real issues, share caught" />
+              <Metric label="F1" value={ev.f1.toFixed(3)} hint="the two combined" />
+              <Metric label="False positives" value={ev.fpr.toFixed(3)} hint="clean answers flagged anyway" />
             </MetricRow>
           )}
 
@@ -52,10 +54,13 @@ export function Trust() {
             <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
               Precision at realistic prevalence
             </div>
-            <p className="mb-3 text-[12px] leading-relaxed text-muted-foreground">
-              A balanced test set flatters any detector. This is what the same recall produces once
-              only a small share of live traffic is genuinely risky, assuming a {(fpr * 100).toFixed(0)}% false
-              positive rate rather than the {((ev?.fpr ?? 0) * 100).toFixed(0)}% the small golden set shows.
+            <p className="mb-3 max-w-[68ch] text-[12px] leading-relaxed text-muted-foreground">
+              Those scores above come from a test set that is roughly half risky by construction.
+              Real traffic is not. Once only a small share of responses is genuinely bad, even a
+              near-perfect detector produces mostly false alarms, because there are so many more
+              good answers available to get wrong. The table assumes a pessimistic{" "}
+              {(fpr * 100).toFixed(0)}% false positive rate rather than the{" "}
+              {((ev?.fpr ?? 0) * 100).toFixed(0)}% this small set measured.
             </p>
             <Table>
               <TableHeader>
@@ -80,10 +85,13 @@ export function Trust() {
                 })}
               </TableBody>
             </Table>
-            <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
-              This is the whole argument for four actions instead of a block switch. A system that
-              blocked on every flag would, at realistic prevalence, block mostly correct answers.
-            </p>
+            <Why>
+              This is the whole argument for four actions instead of a block switch. At 1%{" "}
+              <Term k="prevalence">prevalence</Term>, more than eight in ten flags are noise. A
+              system that blocked on all of them would be blocking mostly correct answers, and would
+              be switched off or routed around within a week. So editing is the default, blocking is
+              reserved for the irreversible, and anything uncertain goes to a person.
+            </Why>
           </div>
         </CardContent>
       </Card>
@@ -91,7 +99,12 @@ export function Trust() {
       <div className="space-y-4">
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-sm">Runtime economics</CardTitle></CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            <p className="text-[12px] leading-relaxed text-muted-foreground">
+              What the checking cost, against what <Term k="routing">cost-aware routing</Term> saved
+              by sending easy requests to a cheaper model. When the second number is larger, the
+              oversight layer is free.
+            </p>
             {econ && (
               <MetricRow>
                 <Metric label="Oversight cost" value={`$${econ.spendUsd.toFixed(4)}`} hint="model calls" />

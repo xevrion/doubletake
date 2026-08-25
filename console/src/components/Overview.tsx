@@ -3,6 +3,8 @@ import { ActionBadge } from "./ActionLadder";
 import { Metric, MetricRow } from "./Metric";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { HowItWorks } from "./HowItWorks";
+import { Term, Why } from "./Explain";
 
 const FILL: Record<string, string> = {
   pass: "bg-pass", patch: "bg-patch", pause: "bg-pause", page: "bg-page",
@@ -16,6 +18,8 @@ export function Overview({ data }: { data: OverviewData }) {
 
   return (
     <div className="space-y-4">
+      <HowItWorks />
+
       <MetricRow>
         <Metric label="Interactions" value={String(data.interactions)} hint="checked this session" />
         <Metric label="Held for review" value={String(data.pendingReview)}
@@ -24,7 +28,7 @@ export function Overview({ data }: { data: OverviewData }) {
         <Metric label="Oversight cost" value={`$${e.perThousandUsd.toFixed(3)}`} hint="per 1,000 interactions" />
         <Metric label="Routing saved" value={`$${e.savedUsd.toFixed(4)}`}
                 tone={e.netUsd >= 0 ? "good" : undefined}
-                hint={e.netUsd >= 0 ? "exceeds oversight cost" : "below oversight cost"} />
+                hint={e.netUsd >= 0 ? "more than checking cost" : "below oversight cost"} />
         <Metric label="Latency p95" value={`${data.latency.p95.toFixed(0)}ms`}
                 hint={`p50 ${data.latency.p50.toFixed(0)} · p99 ${data.latency.p99.toFixed(0)}`} />
       </MetricRow>
@@ -34,6 +38,10 @@ export function Overview({ data }: { data: OverviewData }) {
           <CardHeader className="pb-3"><CardTitle className="text-sm">Where traffic lands</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <div>
+              <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">
+                Most traffic should pass. A layer that flagged everything would be ignored within a
+                week, so this bar is the first thing to look at.
+              </p>
               <div className="flex h-7 overflow-hidden rounded-md border">
                 {ACTIONS.map((a) => {
                   const v = data.byAction[a] ?? 0;
@@ -70,6 +78,10 @@ export function Overview({ data }: { data: OverviewData }) {
             </Block>
 
             <Block title="By use case">
+              <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">
+                Each <Term k="profile">use case profile</Term> carries its own thresholds, so the
+                flag rate differs by design rather than by accident.
+              </p>
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
@@ -99,6 +111,10 @@ export function Overview({ data }: { data: OverviewData }) {
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-sm">Recent decisions</CardTitle></CardHeader>
           <CardContent>
+            <p className="mb-3 text-[12px] leading-relaxed text-muted-foreground">
+              The last dozen responses the gateway saw, newest first, with the action it chose and
+              how long the check took.
+            </p>
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">

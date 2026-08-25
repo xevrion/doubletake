@@ -7,6 +7,7 @@ import { Queue, Corrections, Policies } from "@/components/Queue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun } from "lucide-react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -47,6 +48,7 @@ export default function App() {
   const pending = queue.filter((q) => !q.override).length;
 
   return (
+    <TooltipProvider delayDuration={150}>
     <div className="min-h-svh">
       <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
         <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-6 px-5">
@@ -102,6 +104,7 @@ export default function App() {
         </Tabs>
       </main>
     </div>
+    </TooltipProvider>
   );
 }
 
