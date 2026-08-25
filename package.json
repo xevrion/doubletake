@@ -11,11 +11,16 @@
     "seed": "bun run scripts/seed-traffic.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "hono": "^4.6.14",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.7.2"
-  }
+  },
+  "trustedDependencies": [
+    "onnxruntime-node",
+    "protobufjs"
+  ]
 }
