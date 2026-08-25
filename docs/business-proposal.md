@@ -105,28 +105,54 @@ which is precisely why the false positive rate is the number the product
 optimises and reports, and why the tuning loop exists. A system that halves its
 false positive rate halves its running cost.
 
-The return is avoided incidents. One documented chatbot misstatement that reaches
-a tribunal, one personal-data leak reportable under DPDP, or one biased decision
-in a regulated workflow costs more than the layer does in a year. We are
-deliberately not putting a single expected-value number on that: the honest claim
-is that the cost is small and bounded while the avoided loss is large and
-uncertain, which is the shape of every insurance argument.
+The return is avoided incidents, and the documented comparators are large. The
+average cost of a data breach in India reached ₹25.5 crore in 2026 (IBM), the
+Italian data protection authority fined OpenAI €15M in 2024, and an automated
+hiring system cost iTutorGroup a $365,000 EEOC settlement. Against those, an
+oversight layer whose compute cost is measured in hundreds of dollars a year is
+not a difficult purchase.
+
+We are deliberately not putting a single expected-value number on it. The honest
+claim is that the cost is small and bounded while the avoided loss is large and
+uncertain, which is the shape of every insurance argument. Sources and confidence
+levels for all of the above are in [regulatory.md](regulatory.md).
+
+On the routing side the evidence is stronger than a vendor claim: FrugalGPT
+reports matching a frontier model's performance at up to 98% lower cost, and
+RouteLLM reports halving cost without quality loss. Our own measured saving on
+the demo traffic mix is more modest, and it is the number the console displays.
+
+### Market
+
+Gartner sizes AI governance platform spend at **$492M in 2026, reaching $1B by
+2030**, and reports that organisations using a specialised governance platform
+are 3.4 times more likely to achieve effective governance. Separately it projects
+that fragmented AI regulation will reach half of world economies by 2027,
+driving $5B in compliance investment. Enterprise spend on foundation-model APIs
+was $12.5B in 2025 (Menlo Ventures), so the thing being governed is already a
+large line item.
 
 ## 5. Regulatory alignment
 
 DoubleTake is designed to produce the evidence these regimes ask for, rather than
 to claim compliance with them.
 
-**India DPDP Act 2023** is the near-term driver: it is law, it is dated, and it
-carries significant financial penalties for failures to protect personal data.
+**India DPDP Act 2023** is the near-term driver: it is law, and its Schedule sets
+a **₹250 crore** penalty for failure of reasonable security safeguards, with
+substantive obligations biting in the first half of 2027. Rule 6 requires regular
+monitoring and logging with one-year retention; Rule 13 requires Significant Data
+Fiduciaries to run an annual data audit and algorithmic due diligence.
 The gateway's contribution is concrete: personal data is detected and redacted
 before it reaches a user, every decision is logged with a retention period set
 per use case, and the log stores hashes and previews rather than full text so the
 audit trail does not itself become the largest personal-data store in the
 company.
 
-**EU AI Act** matters for any use case serving European users. The relevant
-obligations are record-keeping, human oversight, and transparency. The audit
+**EU AI Act** matters for any use case serving European users. It entered general
+application on 2 August 2026, and the Digital Omnibus amendment (in force 27 July
+2026) moved stand-alone high-risk obligations to 2 December 2027. The relevant
+duties are Article 12 record-keeping, Article 14 human oversight, and Article 50
+transparency. The audit
 trail is the record-keeping artefact; the reviewer queue and the override
 mechanism are the human oversight artefact; the patch disclosure is a
 transparency artefact.

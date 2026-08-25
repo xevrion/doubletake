@@ -1,15 +1,9 @@
 import type { Detector, DetectorInput, Finding, Evidence } from "../policy/types.ts";
 import { severityOf } from "../policy/decide.ts";
 
-// tier-0 safety and bias screen.
-//
-// honest scoping note: a lexicon cannot detect bias in the way the literature
-// means it. what it CAN do is catch two concrete, checkable things:
-//   - overtly unsafe content (self-harm instructions, harassment, slurs)
-//   - protected-attribute reasoning: the model justifying a decision about a
-//     person by referencing a protected characteristic
-// the second is the one that matters for the regulated-decision profile, and
-// it's narrow enough that a rule can be precise about it.
+// Tier-0 safety and bias screen. A lexicon cannot measure bias in the sense the
+// literature means; it can catch overtly unsafe content and protected-attribute
+// reasoning, which is what the regulated-decision profile needs.
 
 const UNSAFE = [
   { label: "self-harm", weight: 0.95, re: /\b(?:how\s+to\s+(?:kill|hurt|harm)\s+(?:yourself|myself)|end\s+your\s+own\s+life|methods?\s+of\s+suicide)\b/i },
@@ -18,19 +12,15 @@ const UNSAFE = [
   { label: "illicit-howto", weight: 0.7, re: /\b(?:how\s+to\s+(?:launder\s+money|evade\s+taxes|hack\s+into|steal\s+(?:credentials|identity)))\b/i },
 ];
 
-// protected attributes as defined across the equality statutes we care about
-// (EU AI Act art.10 / GDPR art.9 special categories, and india's constitutional
-// grounds in art.15).
+// Grounds drawn from GDPR art.9 special categories and Constitution of India art.15.
 const PROTECTED = /\b(?:race|racial|caste|religion|religious|muslim|hindu|christian|sikh|dalit|gender|sex|male|female|women|men|pregnan\w*|disab\w+|age[ds]?|ageing|aging|older|younger|elderly|young|senior\s+citizens?|ethnic\w*|nationality|immigrant|migrant|foreign|sexual\s+orientation|gay|lesbian|transgender|marital\s+status|caste)\b/i;
 
-// the giveaway is a protected attribute sitting inside a decision or an
-// inference about a person, not merely being mentioned.
+// A protected attribute only matters here when it sits inside a decision.
 const DECISION_CONTEXT = /\b(?:because|since|due\s+to|owing\s+to|given\s+(?:that|their|his|her)|therefore|so\s+(?:we|i|you)\s+should|not\s+(?:eligible|suitable|a\s+good\s+fit)|reject|decline|deny|approve|higher\s+risk|lower\s+risk|less\s+likely|more\s+likely|typically|tend\s+to|usually\s+are)\b/i;
 
 const GENERALISATION = /\b(?:all|most|every|typical(?:ly)?|general(?:ly)?|these\s+people|those\s+people|they\s+(?:all|usually|tend)|are\s+(?:less|more)\b)/i;
 
-// a comparative judgement about a group ("less adaptable", "more reliable") is
-// the stereotype pattern even without an explicit decision verb attached.
+// "less adaptable", "more reliable": stereotype shape without a decision verb.
 const COMPARATIVE_JUDGEMENT = /\b(?:less|more|worse|better|poorly|highly)\s+(?:adaptable|productive|reliable|competent|capable|suitable|trainable|motivated|committed|aggressive|emotional)\b/i;
 
 export const toxicityDetector: Detector = {
@@ -52,8 +42,7 @@ export const toxicityDetector: Detector = {
       evidence.push({ kind: "span", text: `${rule.label}: "${m[0].slice(0, 80)}"`, start: m.index, end: m.index + m[0].length });
     }
 
-    // bias check runs sentence-by-sentence so we can point at the exact clause
-    // and so a protected word in one sentence doesn't taint an unrelated one.
+    // Sentence by sentence, so a protected word in one clause cannot taint another.
     for (const sent of text.split(/(?<=[.!?])\s+/)) {
       const prot = PROTECTED.exec(sent);
       if (!prot) continue;
@@ -62,10 +51,7 @@ export const toxicityDetector: Detector = {
       const judges = COMPARATIVE_JUDGEMENT.test(sent);
       if (!inDecision && !generalises && !judges) continue;
 
-      // both signals together = a stereotype driving a decision. that's the
-      // pattern the high-risk profile hard-blocks on.
-      // a stereotype driving a decision is the worst case; a bare generalisation
-      // is still worth a hedge in an internal tool.
+      // Both signals together is a stereotype driving a decision.
       const w = inDecision && (generalises || judges) ? 0.88 : inDecision ? 0.72 : judges ? 0.62 : 0.55;
       score = Math.max(score, w);
       categories.add("bias");
@@ -85,8 +71,7 @@ export const toxicityDetector: Detector = {
       categories: [...categories],
       score,
       severity: severityOf(score),
-      // lexicons are precise on what they know and blind to everything else.
-      // bias especially: this is a screen, not an assessment.
+      // Precise on listed phrasings, blind to everything else.
       confidence: categories.has("bias") && !categories.has("safety") ? 0.45 : 0.7,
       evidence: evidence.slice(0, 6),
       latencyMs,

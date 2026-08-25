@@ -12,12 +12,9 @@ import { judgeDetector } from "../detectors/judge.ts";
 import { nliDetector, isNliReady } from "../detectors/nli.ts";
 import { toxicityModelDetector, isToxicityReady } from "../detectors/toxicity-model.ts";
 
-// the request path. the whole design goal is that the inline part stays inside
-// the profile's latency budget, so:
-//   - tier 0 detectors all run CONCURRENTLY, never in sequence
-//   - the whole tier-0 batch races a timeout; a slow detector is dropped, not waited on
-//   - tier 1 (a judge model) runs inline only if the profile's budget allows it,
-//     otherwise it goes async and can recall-and-correct after the fact
+// The request path. Tier-0 detectors run concurrently against a shared deadline,
+// so inline cost is the slowest detector rather than their sum. Tier 1 runs
+// inline only when the profile's budget allows, otherwise it goes async.
 
 const TIER0: Detector[] = [piiDetector, groundednessDetector, injectionDetector, toxicityDetector, makeCostDetector()];
 
@@ -51,9 +48,8 @@ export interface CheckResult {
   asyncPending: boolean;
 }
 
-// run a detector with its own guard rails: it must not throw into the request
-// path and it must not hang. a failure becomes a "failed" finding, which the
-// policy layer reads as uncertainty and escalates -- never a silent pass.
+// A detector must never throw into the request path or hang. Failures become a
+// "failed" finding, which the policy layer reads as uncertainty and escalates.
 async function runGuarded(d: Detector, input: DetectorInput, timeoutMs: number): Promise<Finding | null> {
   const started = performance.now();
   try {
@@ -88,14 +84,11 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
     history: req.history, profileId: profile.id, usage: req.usage,
   };
 
-  // a refusal short-circuits the grounding checks entirely. there is nothing to
-  // verify in "I can't help with that", and treating it as an unsupported claim
-  // means a well-behaved model gets escalated for declining -- which trains
-  // operators to ignore the queue.
+  // Nothing to verify in "I can't help with that", and escalating a model for
+  // declining trains operators to ignore the queue.
   const refusal = isRefusal(req.response) && req.response.length < 300;
 
-  // tier 0, all at once. the slice each detector gets is the profile budget
-  // minus a little headroom for the decision + audit write.
+  // Slice leaves headroom for the decision and the audit write.
   const slice = Math.max(60, profile.latencyBudgetMs - 40);
   const active = refusal
     ? TIER0.filter((d) => !d.categories.includes("hallucination"))
@@ -106,9 +99,7 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
 
   const droppedForTime = findings.filter((f) => f.detector.endsWith(":failed")).map((f) => f.detector);
 
-  // tier 1: the judge. it only runs inline when the profile explicitly buys
-  // that latency (decision-support, agent-ops). otherwise it is sampled and
-  // runs after the response has already gone out.
+  // Tier 1 runs inline only where the profile buys the latency; otherwise sampled.
   let asyncPending = false;
   let sampledForAsync = false;
   if (profile.maxInlineTier >= 1 && !refusal) {
@@ -117,18 +108,12 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
       // NLI first: it's local, ~60ms, and gives the three-state verdict. the
       // judge model is the fallback for when no sources were supplied at all,
       // since NLI has nothing to compare against in that case.
-      // NLI whenever sources exist: it is local, ~20ms per claim, and returns
-      // the three-state verdict. isNliReady() only tells us whether the model
-      // has been warmed, not whether it CAN run -- warming on demand is far
-      // better than silently falling back to a network judge that costs money
-      // and 800ms, which is what happened before this line was fixed.
+      // NLI whenever sources exist: local, three-state, and free. The judge is
+      // only for requests that arrive with nothing to check against.
       const hasSources = (req.sources?.length ?? 0) > 0;
       const tier1 = hasSources ? nliDetector : judgeDetector;
 
-      // the model-based safety check runs alongside the grounding one, not
-      // after it: they look at different things and there is no reason to pay
-      // for them serially. the lexicon has already run at tier 0; whichever
-      // scores higher wins, because the two miss in different directions.
+      // Runs alongside grounding rather than after it; they check different things.
       const [grounding, toxModel] = await Promise.all([
         runGuarded(tier1, input, remaining),
         isToxicityReady() ? runGuarded(toxicityModelDetector, input, remaining) : Promise.resolve(null),
@@ -145,10 +130,8 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
     asyncPending = true;
   }
 
-  // the lexical grounding check is a sub-millisecond pre-filter, not a verdict.
-  // once NLI has actually read the sources, keeping the crude score around would
-  // let the weaker signal outvote the stronger one -- which is how g07 (a
-  // perfectly grounded loan rationale) ended up escalated to a human.
+  // The lexical check is a pre-filter, not a verdict. Once NLI has read the
+  // sources, keeping the crude score would let the weaker signal outvote it.
   const nliRan = findings.some((f) => f.detector === "groundedness:nli");
   const effective = nliRan
     ? findings.filter((f) => f.detector !== "groundedness:lexical")
@@ -156,13 +139,9 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
 
   const decision = decide(effective, profile);
 
-  // patching: only PII redaction is a safe automatic edit. rewriting a claim
-  // would mean the checker is now authoring content, which is a different and
-  // much riskier product. everything else gets a disclosure appended.
-  //
-  // note this runs for any action other than a clean pass: if we're escalating
-  // for a fabricated claim, the personal data in the same response still has to
-  // come out before anyone sees it. the two risks are independent.
+  // Redaction is the only safe automatic edit; rewriting a claim would make the
+  // checker an author. Runs on any non-pass action because the two risks are
+  // independent: an escalated response still has to have its PII removed.
   let finalResponse = req.response;
   let patched = false;
   if (decision.action !== "pass") {
@@ -179,8 +158,7 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
       patched = true;
     }
   }
-  // pause and page never ship the raw text onward; the caller gets a holding
-  // message and the original is preserved in the audit record for the reviewer.
+  // Neither ships the raw text; the original stays in the audit record.
   if (decision.action === "pause") {
     finalResponse = "_[DoubleTake paused this response for regeneration on a stronger model. Original retained in audit record " + "]_";
   } else if (decision.action === "page") {
@@ -204,9 +182,7 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
   };
   writeAudit(record);
 
-  // fire-and-forget the deep check for sampled traffic. the caller already has
-  // its answer; if this comes back worse than what we decided inline, it emits
-  // a correction against this record id.
+  // The caller already has its answer; a worse late verdict emits a correction.
   if (sampledForAsync) {
     queueMicrotask(() => {
       verifyLate(id, req).catch(() => { /* late checks are best effort */ });
