@@ -11,6 +11,8 @@ graduated action instead of a binary allow-or-block.
 
 Built for the Accenture Innovation Challenge 2026, problem track 1 (ControlPlane.ai).
 
+![The console overview, explaining the four actions and showing a session of traffic](docs/images/01-overview.jpg)
+
 ## The four actions
 
 Every response lands on one rung of a ladder, chosen by severity and reversibility:
@@ -28,6 +30,12 @@ genuinely risky traffic is small: at a 5% false-positive rate and 1% prevalence,
 fewer than one flag in five is real. A system that blocked on all of them would
 be routed around within a week. `bun run eval` prints that table, and
 [evaluation.md](docs/evaluation.md) works through it.
+
+A fabricated refund policy, caught against the knowledge base and held for a
+human. The evidence quotes the exact sentence that failed, and the original is
+kept in the audit record for whoever reviews it.
+
+![A response being escalated, with the evidence behind the decision](docs/images/02-live-check.jpg)
 
 ## What is actually running
 
@@ -59,6 +67,12 @@ scripts/      self check, evaluation harness, traffic seeder
 docs/         architecture, evaluation, business proposal, regulatory sources
 data/eval/    the labelled golden set
 ```
+
+The console reports the false positive rate alongside the catch rate, and works
+through what that rate means once only a small share of live traffic is actually
+risky.
+
+![Detection quality, precision at realistic prevalence, and threshold tuning](docs/images/03-trust-metrics.jpg)
 
 ## Verifying it
 
