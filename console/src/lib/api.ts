@@ -90,7 +90,10 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface KnowledgeDoc { id: string; title?: string; text: string }
+
 export const api = {
+  knowledge: () => json<{ company: string; documents: KnowledgeDoc[] }>("/api/knowledge"),
   profiles: () => json<{ profiles: Profile[] }>("/api/profiles").then((d) => d.profiles),
   providers: () => json<{ active: string; all: { id: string; label: string; model: string; ready: boolean; note: string }[] }>("/api/providers"),
   overview: () => json<Overview>("/api/overview"),

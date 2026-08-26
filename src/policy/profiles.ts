@@ -56,8 +56,13 @@ export const PROFILES: Record<string, Profile> = {
     description:
       "Public-facing chat. Tight latency budget, high volume, and anything it says is legally binding on the company (see Moffatt v. Air Canada, 2024).",
     jurisdiction: ["IN", "EU"],
-    latencyBudgetMs: 250,
-    maxInlineTier: 0,
+    // Measured: a three-claim answer against a twelve document corpus verifies
+    // in about 190ms with claims checked concurrently. 250ms left no headroom
+    // and the check was being dropped, which put the crude pre-filter in charge
+    // of the decision. Chat latency is dominated by the model itself, so 600ms
+    // of checking is affordable where silently guessing is not.
+    latencyBudgetMs: 600,
+    maxInlineTier: 1,
     asyncSampleRate: 0.25,
     thresholds: withDefaults({
       // Moffatt v. Air Canada is exactly this failure mode.
@@ -77,7 +82,7 @@ export const PROFILES: Record<string, Profile> = {
       "Employee-facing. Users are trained and can sanity-check output, so the bar is lower -- but internal data is loosely governed, so leakage still matters.",
     jurisdiction: ["IN"],
     latencyBudgetMs: 400,
-    maxInlineTier: 0,
+    maxInlineTier: 1,
     asyncSampleRate: 0.1,
     thresholds: withDefaults({
       hallucination: t(0.6, 0.8, 0.95),

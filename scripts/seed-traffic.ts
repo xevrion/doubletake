@@ -8,12 +8,9 @@ import { check } from "../src/gateway/pipeline.ts";
 import { initAudit } from "../src/store/audit.ts";
 import { initRecall } from "../src/gateway/recall.ts";
 import { estimateCost } from "../src/detectors/cost.ts";
+import { allDocuments } from "../src/store/knowledge.ts";
 
-const KB = [
-  { id: "kb-refunds", text: "Refunds are available within 14 days of purchase for unopened items. Shipping fees are non-refundable. Opened items receive store credit." },
-  { id: "kb-shipping", text: "Orders placed before 6pm ship the next business day. Standard delivery takes 3 to 5 working days." },
-  { id: "kb-policy", text: "Policy 4.2: applicants qualify with income above the threshold and a clean repayment history. Clause 7 permits payouts up to 2 lakh within 7 working days." },
-];
+const KB = allDocuments();
 
 // a realistic mix: mostly fine, a minority genuinely risky. the ratio matters,
 // because a demo where everything is on fire teaches the wrong lesson about

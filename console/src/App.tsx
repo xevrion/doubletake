@@ -4,6 +4,7 @@ import { Overview } from "@/components/Overview";
 import { LiveCheck } from "@/components/LiveCheck";
 import { Trust } from "@/components/Trust";
 import { Queue, Corrections, Policies } from "@/components/Queue";
+import { Knowledge } from "@/components/Knowledge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun } from "lucide-react";
@@ -15,6 +16,7 @@ const TABS = [
   { id: "queue", label: "Review queue" },
   { id: "trust", label: "Trust metrics" },
   { id: "corrections", label: "Corrections" },
+  { id: "knowledge", label: "Knowledge" },
   { id: "policy", label: "Policy" },
 ] as const;
 
@@ -97,6 +99,9 @@ export default function App() {
           </TabsContent>
           <TabsContent value="corrections" className="mt-0">
             <Corrections items={corrections} />
+          </TabsContent>
+          <TabsContent value="knowledge" className="mt-0">
+            <Knowledge />
           </TabsContent>
           <TabsContent value="policy" className="mt-0">
             <Policies profiles={profiles} />

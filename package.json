@@ -11,7 +11,8 @@
     "build:console": "cd console && bun install --silent && bun run build",
     "eval": "bun run scripts/run-eval.ts",
     "selfcheck": "bun run scripts/selfcheck.ts",
-    "seed": "bun run scripts/seed-traffic.ts"
+    "seed": "bun run scripts/seed-traffic.ts",
+    "probe": "bun run scripts/live-probe.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

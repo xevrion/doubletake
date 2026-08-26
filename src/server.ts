@@ -8,12 +8,20 @@ import { warmToxicity } from "./detectors/toxicity-model.ts";
 import { initRecall, recentCorrections, verifyLate } from "./gateway/recall.ts";
 import { PRICES, routeModel, estimateCost, estimateTokens } from "./detectors/cost.ts";
 import { complete, activeProvider, configuredProviders, providers } from "./gateway/upstream.ts";
+import { knowledgeBase, allDocuments } from "./store/knowledge.ts";
 
 const app = new Hono();
 
 app.get("/api/health", (c) => c.json({ ok: true, service: "doubletake" }));
 
 app.get("/api/profiles", (c) => c.json({ profiles: listProfiles() }));
+
+// The demo company's policy documents, so the console can show what answers are
+// being checked against. A real deployment supplies these per request instead.
+app.get("/api/knowledge", (c) => c.json({
+  company: knowledgeBase().company,
+  documents: allDocuments(),
+}));
 
 app.get("/api/providers", (c) => c.json({
   active: activeProvider().id,

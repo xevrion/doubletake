@@ -104,7 +104,10 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
   let sampledForAsync = false;
   if (profile.maxInlineTier >= 1 && !refusal) {
     const remaining = profile.latencyBudgetMs - (performance.now() - t0);
-    if (remaining > 150) {
+    // Local NLI needs tens of milliseconds, not hundreds. The old 150ms floor
+    // was sized for a network judge call and silently skipped the better
+    // detector on every fast profile.
+    if (remaining > 40) {
       // NLI first: it's local, ~60ms, and gives the three-state verdict. the
       // judge model is the fallback for when no sources were supplied at all,
       // since NLI has nothing to compare against in that case.

@@ -7,15 +7,6 @@ import { severityOf } from "../policy/decide.ts";
 // enterprise actually controls. This tier is the cheap pre-filter; nli.ts is the
 // real check.
 
-const STOPWORDS = new Set([
-  "the","a","an","and","or","but","if","then","than","that","this","these","those",
-  "is","are","was","were","be","been","being","to","of","in","on","at","for","with",
-  "by","from","as","it","its","you","your","we","our","they","their","i","me","my",
-  "will","would","can","could","should","may","might","must","have","has","had","do",
-  "does","did","not","no","yes","so","up","out","about","into","over","after","also",
-  "please","thanks","hello","hi","sure","there","here","what","when","where","which",
-]);
-
 // Models emit typographic punctuation freely: non-breaking hyphens, smart
 // quotes, en dashes. Left alone, "non\u2011refundable" tokenises as two unknown
 // words and a correct answer reads as unsupported, so everything is folded to
@@ -28,6 +19,16 @@ export function normalise(s: string): string {
     .replace(/[\u201C\u201D\u201F]/g, '"')     // double quotes
     .replace(/[\u00A0\u2007\u202F\u2009]/g, " "); // non-breaking and thin spaces
 }
+
+const STOPWORDS = new Set([
+  "the","a","an","and","or","but","if","then","than","that","this","these","those",
+  "is","are","was","were","be","been","being","to","of","in","on","at","for","with",
+  "by","from","as","it","its","you","your","we","our","they","their","i","me","my",
+  "will","would","can","could","should","may","might","must","have","has","had","do",
+  "does","did","not","no","yes","so","up","out","about","into","over","after","also",
+  "please","thanks","hello","hi","sure","there","here","what","when","where","which",
+]);
+
 
 function tokenize(s: string): string[] {
   return normalise(s).toLowerCase().match(/[a-z0-9][a-z0-9'-]*/g) ?? [];
@@ -68,7 +69,9 @@ const IDENTIFIER_ECHO = /\b(?:order|invoice|txn|transaction|reference|ref|tracki
 const REFUSAL = /\b(?:i(?:'m| am)?\s*(?:sorry|afraid)|i\s*(?:can(?:'|no)?t|cannot|won'?t|am\s+unable\s+to|don'?t\s+have\s+(?:access|that))|unable\s+to\s+(?:provide|share|assist)|not\s+able\s+to\s+(?:provide|share)|i\s+do\s+not\s+have\s+(?:access|information))\b/i;
 
 export function isRefusal(text: string): boolean {
-  return REFUSAL.test(text);
+  // Normalise first: models write "I'm" with a curly apostrophe about as often
+  // as a straight one, and an unnormalised match misses half of them.
+  return REFUSAL.test(normalise(text));
 }
 
 export function isCheckableClaim(sentence: string): boolean {
@@ -77,7 +80,7 @@ export function isCheckableClaim(sentence: string): boolean {
   // questions and explicit hedges aren't assertions of fact.
   if (/\?\s*$/.test(sentence)) return false;
   if (/\b(i think|might be|may vary|please (?:check|confirm|contact)|i'?m not sure|cannot confirm)\b/i.test(sentence)) return false;
-  if (REFUSAL.test(sentence)) return false;
+  if (REFUSAL.test(normalise(sentence))) return false;
 
   // strip identifiers before deciding whether any real numeric claim remains.
   const withoutIds = sentence.replace(IDENTIFIER_ECHO, " ");
@@ -137,6 +140,11 @@ export const groundednessDetector: Detector = {
 
     // Unverifiable is a real state, reported at low confidence rather than as a
     // pass. The policy layer decides what an unverifiable claim is worth.
+    // A model declining to answer is the behaviour we want. Scoring it as an
+    // unverified claim punishes exactly that, and it fires constantly against
+    // well-aligned models.
+    if (isRefusal(input.response) && input.response.length < 320) return null;
+
     if (sources.length === 0) {
       const claims = splitSentences(input.response).filter((s) => isCheckableClaim(s.text));
       if (claims.length === 0) return null;

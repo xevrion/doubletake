@@ -1,6 +1,6 @@
 import type { Detector, DetectorInput, Finding, Evidence, GroundingSource } from "../policy/types.ts";
 import { severityOf } from "../policy/decide.ts";
-import { splitSentences, isCheckableClaim } from "./groundedness.ts";
+import { splitSentences, isCheckableClaim, normalise as normaliseText } from "./groundedness.ts";
 import { AutoTokenizer, AutoModelForSequenceClassification, env } from "@huggingface/transformers";
 
 // NLI grounding: the real hallucination check.
@@ -106,40 +106,149 @@ export interface NliClaim {
   bestChunkText?: string;
 }
 
+// NLI models are unreliable on unrelated pairs: given a lending policy as the
+// premise and a refund statement as the hypothesis, the model returns 0.99
+// contradiction rather than neutral, because the pair is out of distribution.
+// Checking every claim against every document therefore manufactures
+// contradictions purely from corpus size.
+//
+// A cheap lexical filter fixes it. Only passages that share vocabulary with the
+// claim are worth asking about, which is what a retrieval step would do in a
+// real deployment anyway.
+const CHUNK_STOPWORDS = new Set(["the", "a", "an", "and", "or", "of", "to", "in", "for", "on", "is", "are", "within", "after", "not"]);
+
+function keyTerms(text: string): Set<string> {
+  const words = normaliseText(text).toLowerCase().match(/[a-z0-9][a-z0-9-]*/g) ?? [];
+  return new Set(words.filter((w) => w.length > 3 && !CHUNK_STOPWORDS.has(w)));
+}
+
+export function relevantChunks(
+  claim: string,
+  chunks: { id: string; text: string }[],
+  minOverlap = 2,
+): { id: string; text: string }[] {
+  const claimTerms = keyTerms(claim);
+  const scored = chunks
+    .map((c) => {
+      const t = keyTerms(c.text);
+      let overlap = 0;
+      for (const w of claimTerms) if (t.has(w)) overlap++;
+      return { chunk: c, overlap };
+    })
+    .filter((x) => x.overlap >= minOverlap)
+    .sort((a, b) => b.overlap - a.overlap);
+
+  // Nothing relevant means the sources genuinely do not address this claim, so
+  // the caller sees an empty list and reports it as unsupported.
+  return scored.slice(0, 6).map((x) => x.chunk);
+}
+
+// Is this claim stated more or less word for word in one of the sources? Not a
+// substitute for entailment, which handles paraphrase; a guard for the case the
+// model gets wrong.
+function quotedFrom(
+  claim: string,
+  chunks: { id: string; text: string }[],
+): { id: string; text: string } | null {
+  const needle = normaliseText(claim).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  if (needle.length < 24) return null;
+  for (const chunk of chunks) {
+    const hay = normaliseText(chunk.text).toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ");
+    if (hay.includes(needle)) return chunk;
+  }
+  return null;
+}
+
 export async function verifyClaims(response: string, sources: GroundingSource[]): Promise<NliClaim[]> {
   const claims = splitSentences(response).filter((s) => isCheckableClaim(s.text));
   if (claims.length === 0 || sources.length === 0) return [];
 
-  const chunks = sources.flatMap((s) => chunkSource(s));
-  const results: NliClaim[] = [];
+  const allChunks = sources.flatMap((s) => chunkSource(s));
+  // Claims are independent of each other, and so are the chunks within a claim.
+  // Verifying them one at a time turned a 20ms model into a 250ms detector that
+  // the fast profiles could not afford, so it was being dropped exactly where it
+  // was most needed.
+  const results = await Promise.all(claims.map(async (c): Promise<NliClaim> => {
+    // Exact support first. The xsmall NLI model is unreliable on near-identical
+    // text once the premise carries extra sentences: a claim quoted verbatim
+    // from a source scored 0.01 entailment against the document containing it.
+    // A direct containment check is both cheaper and more trustworthy than
+    // asking the model about a case it demonstrably gets wrong.
+    const quoted = quotedFrom(c.text, allChunks);
+    if (quoted) {
+      return {
+        claim: c.text, start: c.start, end: c.end, verdict: "entailed",
+        entailment: 1, contradiction: 0,
+        bestChunkId: quoted.id, bestChunkText: quoted.text,
+      };
+    }
 
-  for (const c of claims) {
+    // Filtering only makes sense when there is a corpus to filter. With a
+    // handful of passages, every one of them is worth asking about, and
+    // dropping the only source available would report a contradiction as
+    // merely unsupported.
+    const filtered = allChunks.length > 4 ? relevantChunks(c.text, allChunks) : allChunks;
+    const chunks = filtered.length > 0 ? filtered : allChunks.slice(0, 6);
+    if (allChunks.length > 4 && filtered.length === 0) {
+      return {
+        claim: c.text, start: c.start, end: c.end, verdict: "unsupported",
+        entailment: 0, contradiction: 0,
+      };
+    }
+
+    // Two passes over the chunks, because support and contradiction are not
+    // symmetric. A claim needs only one passage to support it, so the best
+    // entailment anywhere counts. But contradiction from an unrelated passage
+    // is meaningless: a claim about delivery pricing scores high contradiction
+    // against a refund policy simply because the two are about different
+    // things. So a contradiction only counts when no passage supports the claim
+    // well, which is what "the sources say otherwise" actually means.
     let bestEnt = 0, bestContra = 0;
     let bestId: string | undefined, bestText: string | undefined;
+    let contraId: string | undefined, contraText: string | undefined;
 
-    for (const chunk of chunks) {
-      const e = await entail(chunk.text, c.text);
-      // One supporting passage is enough, so max rather than mean.
+    const scored = await Promise.all(
+      chunks.map(async (chunk) => ({ chunk, e: await entail(chunk.text, c.text) })),
+    );
+    for (const { chunk, e } of scored) {
       if (e.entailment > bestEnt) {
         bestEnt = e.entailment;
         bestId = chunk.id;
         bestText = chunk.text;
       }
-      // Tracked separately: contradiction by any source matters even if another agrees.
-      if (e.contradiction > bestContra) bestContra = e.contradiction;
+      if (e.contradiction > bestContra) {
+        bestContra = e.contradiction;
+        contraId = chunk.id;
+        contraText = chunk.text;
+      }
     }
 
+    // A policy corpus contains documents that are about the same topic but
+    // answer different questions: a refund window and a refund processing time
+    // both talk about refunds and days, and the model reads one as
+    // contradicting the other. So a contradiction has to be clearly stronger
+    // than the best support before it wins, rather than merely crossing a
+    // threshold. Below that margin the claim is unsupported: worth a hedge,
+    // not worth an escalation.
+    const CONTRADICTION_MARGIN = 0.25;
     const verdict: ClaimVerdict =
-      bestContra > 0.5 && bestContra > bestEnt ? "contradicted"
+      bestEnt > 0.5 && bestContra - bestEnt < CONTRADICTION_MARGIN ? "entailed"
+      : bestContra > 0.5 && bestContra - bestEnt >= CONTRADICTION_MARGIN ? "contradicted"
       : bestEnt > 0.5 ? "entailed"
       : "unsupported";
 
-    results.push({
+    // Point the evidence at whichever passage decided it.
+    if (verdict === "contradicted") {
+      bestId = contraId;
+      bestText = contraText;
+    }
+
+    return {
       claim: c.text, start: c.start, end: c.end, verdict,
       entailment: bestEnt, contradiction: bestContra,
       bestChunkId: bestId, bestChunkText: bestText,
-    });
-  }
+    };
+  }));
   return results;
 }
 

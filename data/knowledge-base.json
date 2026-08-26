@@ -1,0 +1,73 @@
+{
+  "_comment": "Policy documents for a fictional company, written to behave like a real knowledge base rather than a demo prop: overlapping documents, exceptions buried in prose, similar-looking figures that are easy to confuse, and deliberate gaps where a model will be tempted to invent an answer. DoubleTake never owns this; a caller passes the relevant documents in with each request from its own retrieval system.",
+  "company": "Northwind Retail",
+  "documents": [
+    {
+      "id": "kb-refunds-01",
+      "title": "Refund window",
+      "text": "Refunds are available within 14 days of purchase for unopened items in original packaging. The 14 day window runs from the delivery date, not the order date. Shipping fees are non-refundable in all cases."
+    },
+    {
+      "id": "kb-refunds-02",
+      "title": "Refunds, exceptions",
+      "text": "Items marked final sale cannot be refunded. Opened items receive store credit at 80 percent of the purchase price rather than a cash refund. Northwind Plus members have a 30 day refund window instead of 14 days."
+    },
+    {
+      "id": "kb-refunds-03",
+      "title": "Refund processing time",
+      "text": "Approved refunds are processed within 5 to 7 working days. Refunds return to the original payment method. Store credit is issued immediately."
+    },
+    {
+      "id": "kb-shipping-01",
+      "title": "Dispatch and delivery",
+      "text": "Orders placed before 6pm on a working day ship the next working day. Standard delivery takes 3 to 5 working days after dispatch. Express delivery takes 1 to 2 working days and costs 249 rupees."
+    },
+    {
+      "id": "kb-shipping-02",
+      "title": "Delivery coverage",
+      "text": "Northwind delivers to all serviceable pin codes in India. Deliveries to remote pin codes may take an additional 2 working days. International shipping is not currently offered."
+    },
+    {
+      "id": "kb-support-01",
+      "title": "Contacting support",
+      "text": "Support is reachable at support@northwind.example or on the helpline printed on your invoice. Cases are assigned to an agent and customers are notified by email when an agent picks up the case."
+    },
+    {
+      "id": "kb-support-02",
+      "title": "Response times",
+      "text": "Support aims to respond to email within one working day. Helpline hours are 9am to 7pm, Monday to Saturday. Northwind Plus members receive priority queueing."
+    },
+    {
+      "id": "kb-warranty-01",
+      "title": "Manufacturer warranty",
+      "text": "Electronics carry a 12 month manufacturer warranty from the delivery date. Warranty claims are handled by the manufacturer directly, not by Northwind. A warranty claim is separate from a refund request and has no 14 day limit."
+    },
+    {
+      "id": "kb-lending-01",
+      "title": "Lending policy 4.2",
+      "text": "Policy 4.2: applicants qualify with declared income above the published threshold and a repayment history with no defaults in the preceding 24 months. Applications are assessed on financial criteria only. Protected characteristics must play no part in an assessment."
+    },
+    {
+      "id": "kb-lending-02",
+      "title": "Lending, escalation",
+      "text": "Applications within 10 percent of the income threshold are referred to a second assessor. A declined application must record which financial criterion was not met."
+    },
+    {
+      "id": "kb-claims-01",
+      "title": "Claims clause 7",
+      "text": "Clause 7 permits payouts up to 2 lakh within 7 working days of approval. Claims above 2 lakh require a second approver and take up to 15 working days."
+    },
+    {
+      "id": "kb-hr-01",
+      "title": "Expense policy",
+      "text": "The quarterly expense limit was revised this quarter. The current figure is published on the finance portal. Claims must be submitted within 30 days of the expense being incurred."
+    }
+  ],
+  "known_gaps": [
+    "No document states a returns postage address.",
+    "No document gives the current expense limit figure; it lives on the finance portal.",
+    "No document covers gift card refunds.",
+    "No document states a price match policy.",
+    "No document covers what happens if a delivery is lost in transit."
+  ]
+}
