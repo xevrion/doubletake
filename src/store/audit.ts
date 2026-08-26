@@ -129,6 +129,109 @@ function rowToRecord(row: any): AuditRecord {
   };
 }
 
+// Aggregates computed in SQL. Loading every row into memory to count it worked
+// at fifty interactions and silently under-reported at ten thousand, because
+// the dashboard was summing whatever slice it happened to fetch.
+export interface AuditStats {
+  total: number;
+  byAction: Record<string, number>;
+  byProfile: Record<string, { total: number; flagged: number }>;
+  byCategory: Record<string, number>;
+  pendingReview: number;
+  reviewed: number;
+  uncertain: number;
+  spendUsd: number;
+  savedUsd: number;
+  latency: { p50: number; p95: number; p99: number };
+}
+
+function percentile(q: number): number {
+  const row = getDb().query(
+    `SELECT latency_ms FROM audit ORDER BY latency_ms LIMIT 1 OFFSET
+       (SELECT CAST(COUNT(*) * ? AS INTEGER) FROM audit)`,
+  ).get(q) as { latency_ms: number } | undefined;
+  return row?.latency_ms ?? 0;
+}
+
+export function auditStats(): AuditStats {
+  const db = getDb();
+  const total = (db.query(`SELECT COUNT(*) AS n FROM audit`).get() as { n: number }).n;
+
+  const byAction: Record<string, number> = {};
+  for (const r of db.query(`SELECT final_action AS a, COUNT(*) AS n FROM audit GROUP BY final_action`).all() as any[]) {
+    byAction[r.a] = r.n;
+  }
+
+  const byProfile: Record<string, { total: number; flagged: number }> = {};
+  for (const r of db.query(`
+    SELECT profile_id AS p, COUNT(*) AS total,
+           SUM(CASE WHEN final_action != 'pass' THEN 1 ELSE 0 END) AS flagged
+    FROM audit GROUP BY profile_id`).all() as any[]) {
+    byProfile[r.p] = { total: r.total, flagged: r.flagged ?? 0 };
+  }
+
+  const byCategory: Record<string, number> = {};
+  for (const r of db.query(`
+    SELECT top_category AS c, COUNT(*) AS n FROM audit
+    WHERE final_action != 'pass' AND top_category IS NOT NULL
+    GROUP BY top_category`).all() as any[]) {
+    byCategory[r.c] = r.n;
+  }
+
+  const agg = db.query(`
+    SELECT
+      SUM(cost_usd) AS spend,
+      SUM(saved_usd) AS saved,
+      SUM(CASE WHEN uncertain = 1 THEN 1 ELSE 0 END) AS uncertain,
+      SUM(CASE WHEN override_json IS NOT NULL THEN 1 ELSE 0 END) AS reviewed,
+      SUM(CASE WHEN final_action IN ('pause','page') AND override_json IS NULL THEN 1 ELSE 0 END) AS pending
+    FROM audit`).get() as any;
+
+  return {
+    total, byAction, byProfile, byCategory,
+    pendingReview: agg.pending ?? 0,
+    reviewed: agg.reviewed ?? 0,
+    uncertain: agg.uncertain ?? 0,
+    spendUsd: agg.spend ?? 0,
+    savedUsd: agg.saved ?? 0,
+    latency: { p50: percentile(0.5), p95: percentile(0.95), p99: percentile(0.99) },
+  };
+}
+
+// Paged queries. A queue holding several hundred items cannot be rendered in
+// one list, and fetching them all to slice client-side wastes the work anyway.
+export interface Page<T> {
+  items: T[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export function pendingReview(limit = 25, offset = 0, profileId?: string): Page<AuditRecord> {
+  const db = getDb();
+  const where = profileId
+    ? `WHERE final_action IN ('pause','page') AND profile_id = ?`
+    : `WHERE final_action IN ('pause','page')`;
+  const args = profileId ? [profileId] : [];
+
+  const total = (db.query(`SELECT COUNT(*) AS n FROM audit ${where}`).get(...args) as { n: number }).n;
+  const rows = db.query(
+    `SELECT * FROM audit ${where} ORDER BY override_json IS NOT NULL, ts DESC LIMIT ? OFFSET ?`,
+  ).all(...args, limit, offset) as any[];
+
+  return { items: rows.map(rowToRecord), total, offset, limit };
+}
+
+export function auditPage(limit = 50, offset = 0, profileId?: string): Page<AuditRecord> {
+  const db = getDb();
+  const where = profileId ? `WHERE profile_id = ?` : ``;
+  const args = profileId ? [profileId] : [];
+  const total = (db.query(`SELECT COUNT(*) AS n FROM audit ${where}`).get(...args) as { n: number }).n;
+  const rows = db.query(`SELECT * FROM audit ${where} ORDER BY ts DESC LIMIT ? OFFSET ?`)
+    .all(...args, limit, offset) as any[];
+  return { items: rows.map(rowToRecord), total, offset, limit };
+}
+
 export function recentAudits(limit = 50, profileId?: string): AuditRecord[] {
   const q = profileId
     ? getDb().query(`SELECT * FROM audit WHERE profile_id = ? ORDER BY ts DESC LIMIT ?`).all(profileId, limit)

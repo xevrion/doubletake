@@ -26,18 +26,27 @@ export default function App() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [provider, setProvider] = useState("model");
   const [overview, setOverview] = useState<OverviewData | null>(null);
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [corrections, setCorrections] = useState<Correction[]>([]);
+  const PAGE = 25;
+  const [queue, setQueue] = useState<{ items: QueueItem[]; total: number; offset: number }>({ items: [], total: 0, offset: 0 });
+  const [corrections, setCorrections] = useState<{ items: Correction[]; total: number; offset: number }>({ items: [], total: 0, offset: 0 });
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
   }, [dark]);
 
+  const loadQueue = useCallback((offset = 0) => {
+    api.queue(PAGE, offset).then((d) => setQueue({ items: d.items, total: d.total, offset: d.offset })).catch(() => {});
+  }, []);
+
+  const loadCorrections = useCallback((offset = 0) => {
+    api.corrections(PAGE, offset).then((d) => setCorrections({ items: d.items, total: d.total, offset: d.offset })).catch(() => {});
+  }, []);
+
   const refresh = useCallback(() => {
     api.overview().then(setOverview).catch(() => {});
-    api.queue().then(setQueue).catch(() => {});
-    api.corrections().then(setCorrections).catch(() => {});
-  }, []);
+    loadQueue(queue.offset);
+    loadCorrections(corrections.offset);
+  }, [loadQueue, loadCorrections, queue.offset, corrections.offset]);
 
   useEffect(() => {
     api.profiles().then(setProfiles).catch(() => {});
@@ -47,7 +56,9 @@ export default function App() {
     refresh();
   }, [refresh]);
 
-  const pending = queue.filter((q) => !q.override).length;
+  // The queue endpoint returns a page; the true pending count comes from the
+  // aggregate, or a badge on a large backlog reads as the page size.
+  const pending = overview?.pendingReview ?? queue.items.filter((q) => !q.override).length;
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -68,7 +79,7 @@ export default function App() {
                   {t.label}
                   {t.id === "queue" && pending > 0 && (
                     <span className="tabular inline-grid size-[17px] place-items-center rounded-full bg-page text-[10px] font-bold text-white">
-                      {pending}
+                      {pending > 999 ? `${Math.floor(pending / 1000)}k` : pending}
                     </span>
                   )}
                 </TabsTrigger>
@@ -92,13 +103,19 @@ export default function App() {
             <LiveCheck profiles={profiles} providerLabel={provider} onDone={refresh} />
           </TabsContent>
           <TabsContent value="queue" className="mt-0">
-            <Queue items={queue} onChange={refresh} />
+            <Queue
+              items={queue.items} total={queue.total} offset={queue.offset} limit={PAGE}
+              onPage={loadQueue} onChange={refresh}
+            />
           </TabsContent>
           <TabsContent value="trust" className="mt-0">
             <Trust />
           </TabsContent>
           <TabsContent value="corrections" className="mt-0">
-            <Corrections items={corrections} />
+            <Corrections
+              items={corrections.items} total={corrections.total} offset={corrections.offset} limit={PAGE}
+              onPage={loadCorrections}
+            />
           </TabsContent>
           <TabsContent value="knowledge" className="mt-0">
             <Knowledge />

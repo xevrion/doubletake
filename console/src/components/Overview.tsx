@@ -6,6 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { HowItWorks } from "./HowItWorks";
 import { Term, Why } from "./Explain";
 
+const fmt = (n: number) => n.toLocaleString();
+
 const FILL: Record<string, string> = {
   pass: "bg-pass", patch: "bg-patch", pause: "bg-pause", page: "bg-page",
 };
@@ -21,10 +23,10 @@ export function Overview({ data }: { data: OverviewData }) {
       <HowItWorks />
 
       <MetricRow>
-        <Metric label="Interactions" value={String(data.interactions)} hint="checked this session" />
-        <Metric label="Held for review" value={String(data.pendingReview)}
+        <Metric label="Interactions" value={fmt(data.interactions)} hint="checked this session" />
+        <Metric label="Held for review" value={fmt(data.pendingReview)}
                 hint={data.reviewed ? `${data.reviewed} resolved` : "awaiting a reviewer"} />
-        <Metric label="Corrections" value={String(data.corrections)} hint="late checks that changed the call" />
+        <Metric label="Corrections" value={fmt(data.corrections)} hint="late checks that changed the call" />
         <Metric label="Oversight cost" value={`$${e.perThousandUsd.toFixed(3)}`} hint="per 1,000 interactions" />
         <Metric label="Routing saved" value={`$${e.savedUsd.toFixed(4)}`}
                 tone={e.netUsd >= 0 ? "good" : undefined}
@@ -53,7 +55,7 @@ export function Overview({ data }: { data: OverviewData }) {
                 {ACTIONS.map((a) => (
                   <span key={a} className="inline-flex items-center gap-1.5 text-muted-foreground">
                     <span className={`size-2 rounded-[2px] ${FILL[a]}`} />
-                    {ACTION_COPY[a].label} {data.byAction[a] ?? 0}
+                    {ACTION_COPY[a].label} {fmt(data.byAction[a] ?? 0)}
                   </span>
                 ))}
               </div>
@@ -70,7 +72,7 @@ export function Overview({ data }: { data: OverviewData }) {
                       <span className="h-1.5 overflow-hidden rounded-full bg-muted">
                         <span className="block h-full rounded-full bg-muted-foreground/60" style={{ width: `${(v / catMax) * 100}%` }} />
                       </span>
-                      <span className="tabular text-right text-muted-foreground">{v}</span>
+                      <span className="tabular text-right text-muted-foreground">{fmt(v)}</span>
                     </div>
                   ))}
                 </div>
@@ -95,8 +97,8 @@ export function Overview({ data }: { data: OverviewData }) {
                   {Object.entries(data.byProfile).map(([k, v]) => (
                     <TableRow key={k}>
                       <TableCell className="py-1.5 text-[12px]">{k}</TableCell>
-                      <TableCell className="tabular py-1.5 text-right text-[12px]">{v.total}</TableCell>
-                      <TableCell className="tabular py-1.5 text-right text-[12px]">{v.flagged}</TableCell>
+                      <TableCell className="tabular py-1.5 text-right text-[12px]">{fmt(v.total)}</TableCell>
+                      <TableCell className="tabular py-1.5 text-right text-[12px]">{fmt(v.flagged)}</TableCell>
                       <TableCell className="tabular py-1.5 text-right text-[12px]">
                         {((v.flagged / Math.max(1, v.total)) * 100).toFixed(0)}%
                       </TableCell>

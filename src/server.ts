@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { check } from "./gateway/pipeline.ts";
 import { listProfiles, getProfile } from "./policy/profiles.ts";
-import { initAudit, recentAudits, getAudit, recordOverride, purgeExpired, type Override } from "./store/audit.ts";
+import { initAudit, recentAudits, auditPage, pendingReview, auditStats, getAudit, recordOverride, purgeExpired, type Override } from "./store/audit.ts";
 import { warmNli } from "./detectors/nli.ts";
 import { warmToxicity } from "./detectors/toxicity-model.ts";
 import { initRecall, recentCorrections, verifyLate } from "./gateway/recall.ts";
@@ -89,14 +89,15 @@ app.post("/api/check", async (c) => {
 
 // the reviewer queue: everything the gateway paused or escalated, newest first.
 app.get("/api/queue", (c) => {
-  const profileId = c.req.query("profile") ?? undefined;
-  const items = recentAudits(200, profileId).filter((r) => r.finalAction === "pause" || r.finalAction === "page");
-  return c.json({ items: items.slice(0, 50) });
+  const limit = Math.min(Number(c.req.query("limit") ?? 25), 100);
+  const offset = Math.max(0, Number(c.req.query("offset") ?? 0));
+  return c.json(pendingReview(limit, offset, c.req.query("profile") ?? undefined));
 });
 
 app.get("/api/audit", (c) => {
-  const limit = Number(c.req.query("limit") ?? 50);
-  return c.json({ items: recentAudits(Math.min(limit, 200), c.req.query("profile") ?? undefined) });
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+  const offset = Math.max(0, Number(c.req.query("offset") ?? 0));
+  return c.json(auditPage(limit, offset, c.req.query("profile") ?? undefined));
 });
 
 app.get("/api/audit/:id", (c) => {
@@ -167,42 +168,30 @@ app.get("/api/tuning", (c) => {
 // one call that populates the whole overview, so the dashboard does not fan
 // out into six requests on load.
 app.get("/api/overview", (c) => {
-  const all = recentAudits(500);
-  const byAction: Record<string, number> = { pass: 0, patch: 0, pause: 0, page: 0 };
-  const byProfile: Record<string, { total: number; flagged: number }> = {};
-  const byCategory: Record<string, number> = {};
-  let spend = 0, saved = 0, uncertain = 0;
-
-  for (const r of all) {
-    byAction[r.finalAction] = (byAction[r.finalAction] ?? 0) + 1;
-    const p = (byProfile[r.profileId] ??= { total: 0, flagged: 0 });
-    p.total++;
-    if (r.finalAction !== "pass") p.flagged++;
-    if (r.topCategory && r.finalAction !== "pass") byCategory[r.topCategory] = (byCategory[r.topCategory] ?? 0) + 1;
-    spend += r.costUsd;
-    saved += r.savedUsd;
-    if (r.uncertain) uncertain++;
-  }
-
-  const lat = all.map((r) => r.latencyMs).sort((a, b) => a - b);
-  const pct = (q: number) => lat.length ? lat[Math.min(lat.length - 1, Math.floor(lat.length * q))]! : 0;
-  const reviewed = all.filter((r) => r.override).length;
+  const s = auditStats();
+  const e = {
+    spendUsd: Number(s.spendUsd.toFixed(5)),
+    savedUsd: Number(s.savedUsd.toFixed(5)),
+    netUsd: Number((s.savedUsd - s.spendUsd).toFixed(5)),
+    perThousandUsd: s.total ? Number(((s.spendUsd / s.total) * 1000).toFixed(3)) : 0,
+  };
 
   return c.json({
-    interactions: all.length,
-    byAction, byProfile, byCategory,
-    uncertain,
-    reviewed,
-    pendingReview: all.filter((r) => (r.finalAction === "pause" || r.finalAction === "page") && !r.override).length,
-    corrections: recentCorrections(100).length,
-    economics: {
-      spendUsd: Number(spend.toFixed(5)),
-      savedUsd: Number(saved.toFixed(5)),
-      netUsd: Number((saved - spend).toFixed(5)),
-      perThousandUsd: all.length ? Number(((spend / all.length) * 1000).toFixed(3)) : 0,
+    interactions: s.total,
+    byAction: s.byAction,
+    byProfile: s.byProfile,
+    byCategory: s.byCategory,
+    uncertain: s.uncertain,
+    reviewed: s.reviewed,
+    pendingReview: s.pendingReview,
+    corrections: recentCorrections(1000).length,
+    economics: e,
+    latency: {
+      p50: Number(s.latency.p50.toFixed(1)),
+      p95: Number(s.latency.p95.toFixed(1)),
+      p99: Number(s.latency.p99.toFixed(1)),
     },
-    latency: { p50: Number(pct(0.5).toFixed(1)), p95: Number(pct(0.95).toFixed(1)), p99: Number(pct(0.99).toFixed(1)) },
-    recent: all.slice(0, 12).map((r) => ({
+    recent: recentAudits(12).map((r) => ({
       id: r.id, ts: r.ts, profileId: r.profileId, action: r.finalAction,
       topCategory: r.topCategory, maxScore: r.maxScore, latencyMs: r.latencyMs,
       prompt: r.promptPreview.slice(0, 70), reviewed: !!r.override,
@@ -210,33 +199,15 @@ app.get("/api/overview", (c) => {
   });
 });
 
-// Served from the API rather than as a static file, because the console build
-// owns web/ and would wipe it.
-app.get("/eval-results.json", async (c) => {
-  const f = Bun.file("data/eval-results.json");
-  if (!(await f.exists())) return c.json({ error: "run `bun run eval` first" }, 404);
-  return c.json(await f.json());
-});
-
 app.get("/api/economics", (c) => {
-  const all = recentAudits(500);
-  const spend = all.reduce((s, r) => s + r.costUsd, 0);
-  const saved = all.reduce((s, r) => s + r.savedUsd, 0);
-  const byAction = all.reduce<Record<string, number>>((m, r) => {
-    m[r.finalAction] = (m[r.finalAction] ?? 0) + 1;
-    return m;
-  }, {});
-  const latencies = all.map((r) => r.latencyMs).sort((a, b) => a - b);
+  const s = auditStats();
   return c.json({
-    interactions: all.length,
-    spendUsd: Number(spend.toFixed(4)),
-    savedUsd: Number(saved.toFixed(4)),
-    netUsd: Number((saved - spend).toFixed(4)),
-    byAction,
-    latency: {
-      p50: latencies[Math.floor(latencies.length * 0.5)] ?? 0,
-      p95: latencies[Math.floor(latencies.length * 0.95)] ?? 0,
-    },
+    interactions: s.total,
+    spendUsd: Number(s.spendUsd.toFixed(4)),
+    savedUsd: Number(s.savedUsd.toFixed(4)),
+    netUsd: Number((s.savedUsd - s.spendUsd).toFixed(4)),
+    byAction: s.byAction,
+    latency: { p50: s.latency.p50, p95: s.latency.p95 },
     prices: PRICES,
   });
 });
@@ -257,7 +228,12 @@ app.post("/api/route", async (c) => {
   });
 });
 
-app.get("/api/corrections", (c) => c.json({ items: recentCorrections(25) }));
+app.get("/api/corrections", (c) => {
+  const limit = Math.min(Number(c.req.query("limit") ?? 25), 100);
+  const offset = Math.max(0, Number(c.req.query("offset") ?? 0));
+  const all = recentCorrections(1000);
+  return c.json({ items: all.slice(offset, offset + limit), total: all.length, offset, limit });
+});
 
 // force a late check on demand, so the demo can show recall-and-correct without
 // waiting for the sampler to pick a request.

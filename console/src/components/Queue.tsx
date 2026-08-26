@@ -1,12 +1,18 @@
 import { useState } from "react";
 import { api, type QueueItem, type Correction, type Profile } from "@/lib/api";
+import { Pager } from "./Pager";
 import { ActionBadge } from "./ActionLadder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Term, Why } from "./Explain";
 
-export function Queue({ items, onChange }: { items: QueueItem[]; onChange: () => void }) {
+export function Queue({
+  items, total, offset, limit, onPage, onChange,
+}: {
+  items: QueueItem[]; total: number; offset: number; limit: number;
+  onPage: (offset: number) => void; onChange: () => void;
+}) {
   const [busy, setBusy] = useState<string | null>(null);
 
   async function resolve(item: QueueItem, verdict: "true-positive" | "false-positive") {
@@ -86,12 +92,15 @@ export function Queue({ items, onChange }: { items: QueueItem[]; onChange: () =>
             </div>
           ))
         )}
+        <Pager total={total} offset={offset} limit={limit} onChange={onPage} />
       </CardContent>
     </Card>
   );
 }
 
-export function Corrections({ items }: { items: Correction[] }) {
+export function Corrections({
+  items, total, offset, limit, onPage,
+}: { items: Correction[]; total: number; offset: number; limit: number; onPage: (offset: number) => void }) {
   return (
     <Card>
       <CardHeader className="pb-3"><CardTitle className="text-sm">Recall and correct</CardTitle></CardHeader>
@@ -108,9 +117,14 @@ export function Corrections({ items }: { items: Correction[] }) {
           first, so the system measures it rather than hiding it.
         </Why>
         {items.length === 0 ? (
-          <p className="py-12 text-center text-[13px] text-muted-foreground">
-            No corrections issued. Deep checks have agreed with every inline decision so far.
-          </p>
+          <div className="py-10 text-center">
+            <p className="text-[13px] text-muted-foreground">No corrections outstanding.</p>
+            <p className="mx-auto mt-2 max-w-[58ch] text-[12px] leading-relaxed text-muted-foreground/80">
+              Every deep check has agreed with the decision made inline. That is the healthy state:
+              corrections exist for when a profile is too fast to verify properly, and once the
+              grounding check runs inline there is usually nothing left for it to catch.
+            </p>
+          </div>
         ) : (
           items.map((c) => (
             <div key={c.auditId} className="rounded-lg border px-3.5 py-3">
@@ -131,6 +145,7 @@ export function Corrections({ items }: { items: Correction[] }) {
             </div>
           ))
         )}
+        <Pager total={total} offset={offset} limit={limit} onChange={onPage} />
       </CardContent>
     </Card>
   );

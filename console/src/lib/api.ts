@@ -90,6 +90,13 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface Paged<T> {
+  items: T[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export interface KnowledgeDoc { id: string; title?: string; text: string }
 
 export const api = {
@@ -97,8 +104,10 @@ export const api = {
   profiles: () => json<{ profiles: Profile[] }>("/api/profiles").then((d) => d.profiles),
   providers: () => json<{ active: string; all: { id: string; label: string; model: string; ready: boolean; note: string }[] }>("/api/providers"),
   overview: () => json<Overview>("/api/overview"),
-  queue: () => json<{ items: QueueItem[] }>("/api/queue").then((d) => d.items),
-  corrections: () => json<{ items: Correction[] }>("/api/corrections").then((d) => d.items),
+  queue: (limit = 25, offset = 0) =>
+    json<Paged<QueueItem>>(`/api/queue?limit=${limit}&offset=${offset}`),
+  corrections: (limit = 25, offset = 0) =>
+    json<Paged<Correction>>(`/api/corrections?limit=${limit}&offset=${offset}`),
   tuning: () => json<{ reviewedCount: number; suggestions: { category: string; reviewed: number; falsePositives: number; falsePositiveRate: number; suggestion: string }[] }>("/api/tuning"),
   evalResults: () => json<EvalResults>("/eval-results.json?t=" + Date.now()),
 
