@@ -5,7 +5,16 @@ import { ActionBadge } from "./ActionLadder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { Term, Why } from "./Explain";
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[10px]">
+      {children}
+    </kbd>
+  );
+}
 
 export function Queue({
   items, total, offset, limit, onPage, onChange,
@@ -15,19 +24,29 @@ export function Queue({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function resolve(item: QueueItem, verdict: "true-positive" | "false-positive") {
-    const reason = window.prompt(
-      verdict === "false-positive"
-        ? "Why was this flag wrong? This feeds threshold tuning."
-        : "Note for the audit record (optional):",
-    );
-    if (reason === null) return;
+  // Which item is open for review, and what the reviewer has typed so far.
+  // A browser prompt() would block the page and cannot be styled, and this is
+  // the one screen a reviewer lives in all day.
+  const [open, setOpen] = useState<{ id: string; verdict: "true-positive" | "false-positive" } | null>(null);
+  const [note, setNote] = useState("");
+
+  function startReview(item: QueueItem, verdict: "true-positive" | "false-positive") {
+    setOpen({ id: item.id, verdict });
+    setNote("");
+  }
+
+  async function submit(item: QueueItem) {
+    if (!open) return;
     setBusy(item.id);
     try {
       await api.override(item.id, {
-        to: verdict === "false-positive" ? "pass" : item.action,
-        verdict, reason, by: "reviewer@demo",
+        to: open.verdict === "false-positive" ? "pass" : item.action,
+        verdict: open.verdict,
+        reason: note.trim(),
+        by: "reviewer@northwind.example",
       });
+      setOpen(null);
+      setNote("");
       onChange();
     } finally {
       setBusy(null);
@@ -77,14 +96,52 @@ export function Queue({
                   resolved to {i.override.to} by {i.override.by}
                   {i.override.reason && <> · &ldquo;{i.override.reason}&rdquo;</>}
                 </p>
+              ) : open?.id === i.id ? (
+                  <div className="mt-3 rounded-md border bg-muted/30 p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className="text-[12px] font-medium">
+                        {open.verdict === "false-positive"
+                          ? "Marking this as a wrong flag"
+                          : "Confirming this was correctly caught"}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {open.verdict === "false-positive"
+                          ? "the reason feeds threshold tuning"
+                          : "a note is optional"}
+                      </span>
+                    </div>
+                    <Textarea
+                      autoFocus
+                      rows={2}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit(i);
+                        if (e.key === "Escape") setOpen(null);
+                      }}
+                      placeholder={open.verdict === "false-positive"
+                        ? "What did the checker get wrong?"
+                        : "Anything worth recording for the audit trail?"}
+                      className="text-[13px]"
+                    />
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button size="sm" disabled={busy === i.id} onClick={() => submit(i)}>
+                        {busy === i.id ? "Saving" : "Submit"}
+                      </Button>
+                      <Button size="sm" variant="ghost" disabled={busy === i.id} onClick={() => setOpen(null)}>
+                        Cancel
+                      </Button>
+                      <span className="ml-auto text-[11px] text-muted-foreground">
+                        <Kbd>Ctrl</Kbd> <Kbd>Enter</Kbd> to submit
+                      </span>
+                    </div>
+                  </div>
               ) : (
                 <div className="mt-2.5 flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" disabled={busy === i.id}
-                          onClick={() => resolve(i, "false-positive")}>
+                  <Button size="sm" variant="outline" onClick={() => startReview(i, "false-positive")}>
                     Wrong flag
                   </Button>
-                  <Button size="sm" variant="outline" disabled={busy === i.id}
-                          onClick={() => resolve(i, "true-positive")}>
+                  <Button size="sm" variant="outline" onClick={() => startReview(i, "true-positive")}>
                     Correctly caught
                   </Button>
                 </div>
