@@ -269,11 +269,18 @@ export const nliDetector: Detector = {
     const unsupported = claims.filter((c) => c.verdict === "unsupported");
 
     // A contradiction is categorically worse than a gap.
+    // Contradicted and unsupported are different failures and must not land on
+    // the same rung. A contradiction means the sources say otherwise, which is
+    // worth holding. Unsupported usually means the knowledge base is silent,
+    // and regenerating cannot fix a gap in the knowledge base: a stronger model
+    // asked the same unanswerable question will simply invent a better-worded
+    // answer. So an unsupported claim is capped below the pause threshold and
+    // gets a hedge instead.
     let score: number;
     if (contradicted.length > 0) {
       score = Math.min(1, 0.75 + Math.max(...contradicted.map((c) => c.contradiction)) * 0.25);
     } else if (unsupported.length > 0) {
-      score = Math.min(0.7, 0.25 + (unsupported.length / claims.length) * 0.45);
+      score = Math.min(0.5, 0.25 + (unsupported.length / claims.length) * 0.25);
     } else {
       score = 0.05;
     }

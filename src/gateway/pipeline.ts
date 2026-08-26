@@ -144,6 +144,8 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
 
   const decision = decide(effective, profile);
 
+  const id = crypto.randomUUID();
+
   // Redaction is the only safe automatic edit; rewriting a claim would make the
   // checker an author. Runs on any non-pass action because the two risks are
   // independent: an escalated response still has to have its PII removed.
@@ -165,13 +167,12 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
   }
   // Neither ships the raw text; the original stays in the audit record.
   if (decision.action === "pause") {
-    finalResponse = "_[DoubleTake paused this response for regeneration on a stronger model. Original retained in audit record " + "]_";
+    finalResponse = `_[DoubleTake paused this response for regeneration. Original retained in audit record ${id}.]_`;
   } else if (decision.action === "page") {
-    finalResponse = "_[DoubleTake held this response for human review. A reviewer has been notified; the original is in the audit record.]_";
+    finalResponse = `_[DoubleTake held this response for human review. A reviewer has been notified; the original is in audit record ${id}.]_`;
   }
 
   const totalMs = performance.now() - t0;
-  const id = crypto.randomUUID();
 
   const record: AuditRecord = {
     id, ts: Date.now(), profileId: profile.id, jurisdiction: profile.jurisdiction.join(","),

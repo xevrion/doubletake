@@ -218,6 +218,15 @@ app.get("/api/overview", (c) => {
   });
 });
 
+// Served from the API rather than as a static file, because the console build
+// owns web/ and would wipe it. Lost once already to a careless edit, which the
+// self check now guards against.
+app.get("/eval-results.json", async (c) => {
+  const f = Bun.file("data/eval-results.json");
+  if (!(await f.exists())) return c.json({ error: "run `bun run eval` first" }, 404);
+  return c.json(await f.json());
+});
+
 app.get("/api/economics", (c) => {
   const s = auditStats();
   return c.json({

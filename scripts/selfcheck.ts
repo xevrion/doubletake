@@ -208,6 +208,35 @@ ok("a degraded call is labelled, never disguised",
   gen.degraded ? gen.provider === "mock" : gen.provider === active.id,
   gen.degraded ?? "live call");
 
+section("HTTP surface");
+// Routes have been lost to careless edits before. These run only when a server
+// is already listening, so the check stays useful offline.
+{
+  const base = `http://localhost:${process.env.PORT ?? 3000}`;
+  let reachable = false;
+  try {
+    reachable = (await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(1500) })).ok;
+  } catch { /* not running, skip */ }
+
+  if (!reachable) {
+    console.log("  skip  server not running, HTTP checks skipped");
+  } else {
+    for (const path of [
+      "/api/health", "/api/overview", "/api/profiles", "/api/providers",
+      "/api/knowledge", "/api/samples", "/api/tuning", "/api/economics",
+      "/api/queue?limit=1", "/api/corrections?limit=1", "/eval-results.json",
+    ]) {
+      try {
+        const res = await fetch(base + path, { signal: AbortSignal.timeout(4000) });
+        const body = await res.json().catch(() => null);
+        ok(`GET ${path}`, res.ok && body !== null, res.ok ? "" : `status ${res.status}`);
+      } catch (e) {
+        ok(`GET ${path}`, false, e instanceof Error ? e.message : String(e));
+      }
+    }
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed, ${((performance.now() - t0) / 1000).toFixed(1)}s`);
 
 getDb().close();

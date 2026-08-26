@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Overview as OverviewData, type Profile, type QueueItem, type Correction } from "@/lib/api";
 import { Overview } from "@/components/Overview";
 import { LiveCheck } from "@/components/LiveCheck";
 import { Trust } from "@/components/Trust";
 import { Queue, Corrections, Policies } from "@/components/Queue";
 import { Knowledge } from "@/components/Knowledge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 const TABS = [
@@ -42,11 +42,26 @@ export default function App() {
     api.corrections(PAGE, offset).then((d) => setCorrections({ items: d.items, total: d.total, offset: d.offset })).catch(() => {});
   }, []);
 
+  // Offsets are read through refs rather than listed as dependencies. As
+  // dependencies they rebuilt `refresh` on every page change, which re-ran the
+  // mount effect and reset the selected tab on any interaction that refreshed.
+  const queueOffset = useRef(0);
+  const correctionsOffset = useRef(0);
+  queueOffset.current = queue.offset;
+  correctionsOffset.current = corrections.offset;
+
   const refresh = useCallback(() => {
     api.overview().then(setOverview).catch(() => {});
-    loadQueue(queue.offset);
-    loadCorrections(corrections.offset);
-  }, [loadQueue, loadCorrections, queue.offset, corrections.offset]);
+    loadQueue(queueOffset.current);
+    loadCorrections(correctionsOffset.current);
+  }, [loadQueue, loadCorrections]);
+
+  function select(id: string) {
+    setTab(id);
+    if (id === "overview") api.overview().then(setOverview).catch(() => {});
+    if (id === "queue") loadQueue(queueOffset.current);
+    if (id === "corrections") loadCorrections(correctionsOffset.current);
+  }
 
   useEffect(() => {
     api.profiles().then(setProfiles).catch(() => {});
@@ -62,74 +77,78 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={150}>
-    <div className="min-h-svh">
-      <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-6 px-5">
-          <div className="flex items-baseline gap-2.5">
-            <span className="text-[15px] font-semibold tracking-tight">DoubleTake</span>
-            <span className="hidden text-[12px] text-muted-foreground sm:inline">
-              a second look at every AI answer
-            </span>
+      <div className="min-h-svh">
+        <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+          <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-6 px-5">
+            <div className="flex items-baseline gap-2.5">
+              <span className="text-[15px] font-semibold tracking-tight">DoubleTake</span>
+              <span className="hidden text-[12px] text-muted-foreground sm:inline">
+                a second look at every AI answer
+              </span>
+            </div>
+
+            <nav className="ml-auto flex items-center gap-0.5 rounded-lg bg-muted/60 p-[3px]" aria-label="Sections">
+              {TABS.map((t) => {
+                const active = tab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => select(t.id)}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[13px] transition-colors",
+                      active
+                        ? "bg-background font-medium text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {t.label}
+                    {t.id === "queue" && pending > 0 && (
+                      <span className="tabular inline-grid size-[17px] place-items-center rounded-full bg-page text-[10px] font-bold text-white">
+                        {pending > 999 ? `${Math.floor(pending / 1000)}k` : pending}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+
+            <Button
+              variant="ghost" size="icon" className="size-8 shrink-0"
+              onClick={() => setDark((d) => !d)} aria-label="Toggle theme"
+            >
+              {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </Button>
           </div>
+        </header>
 
-          <Tabs value={tab} onValueChange={setTab} className="ml-auto">
-            <TabsList className="h-9">
-              {TABS.map((t) => (
-                <TabsTrigger key={t.id} value={t.id} className="gap-1.5 text-[13px]">
-                  {t.label}
-                  {t.id === "queue" && pending > 0 && (
-                    <span className="tabular inline-grid size-[17px] place-items-center rounded-full bg-page text-[10px] font-bold text-white">
-                      {pending > 999 ? `${Math.floor(pending / 1000)}k` : pending}
-                    </span>
-                  )}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-
-          <Button variant="ghost" size="icon" className="size-8 shrink-0"
-                  onClick={() => setDark((d) => !d)} aria-label="Toggle theme">
-            {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-          </Button>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-[1600px] p-5">
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsContent value="overview" className="mt-0">
-            {overview ? <Overview data={overview} /> : <Loading />}
-          </TabsContent>
-          <TabsContent value="live" className="mt-0">
+        <main className="mx-auto max-w-[1600px] p-5">
+          {tab === "overview" && (overview ? <Overview data={overview} /> : <Loading />)}
+          {tab === "live" && (
             <LiveCheck profiles={profiles} providerLabel={provider} onDone={refresh} />
-          </TabsContent>
-          <TabsContent value="queue" className="mt-0">
+          )}
+          {tab === "queue" && (
             <Queue
               items={queue.items} total={queue.total} offset={queue.offset} limit={PAGE}
               onPage={loadQueue} onChange={refresh}
             />
-          </TabsContent>
-          <TabsContent value="trust" className="mt-0">
-            <Trust />
-          </TabsContent>
-          <TabsContent value="corrections" className="mt-0">
+          )}
+          {tab === "trust" && <Trust />}
+          {tab === "corrections" && (
             <Corrections
-              items={corrections.items} total={corrections.total} offset={corrections.offset} limit={PAGE}
-              onPage={loadCorrections}
+              items={corrections.items} total={corrections.total} offset={corrections.offset}
+              limit={PAGE} onPage={loadCorrections}
             />
-          </TabsContent>
-          <TabsContent value="knowledge" className="mt-0">
-            <Knowledge />
-          </TabsContent>
-          <TabsContent value="policy" className="mt-0">
-            <Policies profiles={profiles} />
-          </TabsContent>
-        </Tabs>
-      </main>
-    </div>
+          )}
+          {tab === "knowledge" && <Knowledge />}
+          {tab === "policy" && <Policies profiles={profiles} />}
+        </main>
+      </div>
     </TooltipProvider>
   );
 }
 
 function Loading() {
-  return <p className="py-20 text-center text-sm text-muted-foreground">Loading…</p>;
+  return <p className="py-20 text-center text-sm text-muted-foreground">Loading</p>;
 }
