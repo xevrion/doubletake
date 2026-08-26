@@ -130,6 +130,7 @@ let loop = null;
 for (let i = 0; i < 6; i++) {
   loop = await costDet.run({
     prompt: "same query over and over", response: "x", profileId: "agent-ops",
+    sessionId: "selfcheck-conversation",
     usage: { promptTokens: 2000, completionTokens: 500, model: "claude-class-frontier", costUsd: 0.0135 },
   });
 }
@@ -137,6 +138,31 @@ ok("runaway agent loop detected", !!loop && loop.score > 0.8, loop ? loop.score.
 const routed = routeModel(0.72);
 const saving = estimateCost("claude-class-frontier", 2000, 500) - estimateCost(routed.model, 2000, 500);
 ok("router picks a cheaper capable model", saving > 0, `${routed.model}, saves $${saving.toFixed(4)}/call`);
+
+section("Loop detection");
+// Keying repetition on the profile made every caller asking the same popular
+// question look like one agent looping. In a 2,000-request load test that
+// flagged 601 clean responses; keyed on the conversation it flags none.
+{
+  resetBudgets();
+  const det = makeCostDetector();
+  const usage = { promptTokens: 300, completionTokens: 60, model: "gemini-flash", costUsd: 0.00005 };
+  let popular = null;
+  for (let i = 0; i < 12; i++) {
+    popular = await det.run({ prompt: "What is your refund window?", response: "14 days.", profileId: "support-bot", usage });
+  }
+  ok("a popular question is not a loop", popular === null || popular.score < 0.5,
+    popular ? `scored ${popular.score.toFixed(2)}` : "no finding");
+
+  resetBudgets();
+  const det2 = makeCostDetector();
+  let looping = null;
+  for (let i = 0; i < 12; i++) {
+    looping = await det2.run({ prompt: "search the web", response: "...", profileId: "agent-ops", sessionId: "conv-1", usage });
+  }
+  ok("one conversation repeating itself is a loop", !!looping && looping.score > 0.8,
+    looping ? `scored ${looping.score.toFixed(2)}` : "no finding");
+}
 
 section("Gateway behaviour");
 const sources = [{ id: "kb-1", text: "Refunds are available within 14 days for unopened items. Shipping fees are non-refundable." }];

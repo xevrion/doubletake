@@ -37,6 +37,59 @@ expected a page, or pages where we expected a pause. That is a materially smalle
 problem than missing the case, and we report it separately rather than folding
 it into the headline number.
 
+## At volume
+
+`bun run load 10000` generates ten thousand interactions across all four
+profiles with an 8% planted risk rate, which is the scale the Round 2 brief
+describes. Fifty interactions tell you nothing about economics; ten thousand do.
+
+| Measure | Result |
+|---|---|
+| Interactions | 10,000 |
+| Throughput | 19 per second on one laptop core |
+| Pass | 92.0% |
+| Pause | 0.9% |
+| Page | 7.1% |
+| Precision | 1.000 |
+| Recall | 1.000 |
+| False positive rate | 0.000 |
+| Latency p50 / p95 / p99 | 33ms / 170ms / 266ms |
+| Oversight cost | $0.018 per 1,000 |
+| Routing saved | $7.92 |
+| Net | +$7.74 |
+
+Projected to 40,000 interactions per week: about $0.73 of oversight compute,
+roughly $31 of routing savings, and 3,200 responses held for a reviewer.
+
+Two things to say plainly about that table.
+
+The perfect precision is real but it is measured against **planted** risk, using
+responses we wrote to be wrong in specific ways. It shows the detectors behave
+consistently at volume and that nothing degrades as traffic accumulates. It is
+not evidence that they would catch a novel failure nobody anticipated. For that,
+`bun run probe` asks a live model real questions and reports what it actually
+does, which is a harder and less flattering test.
+
+The economics are dominated by routing, not by checking. Oversight compute is
+$0.018 per thousand interactions because the detectors run locally; the real
+operating cost of this system is reviewer time on the 3,200 weekly held items,
+which is why the false positive rate matters more than any other number here.
+
+### What the load test found
+
+The first run at this scale reported 601 false positives and a precision of
+0.209, which would have put 15,200 items a week in front of a reviewer. The
+cause was the agent-loop detector: it counted repeated prompts per profile, so
+many different customers asking the same common question ("what is your refund
+window?") looked like one agent stuck in a cycle.
+
+Repetition is now counted per conversation, and a request without a session id
+is not checked for looping at all, because there is nothing for it to loop
+within. False positives went to zero and the review queue fell to 3,200 a week.
+
+None of the single-response tests caught this. It only appeared under sustained
+traffic, which is the argument for running a load test at all.
+
 ## The base rate problem
 
 Precision measured on a balanced test set is not the precision an operator sees.

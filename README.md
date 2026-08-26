@@ -80,10 +80,18 @@ Three commands, no configuration required. The first two are how we check our ow
 claims, and they are the fastest way for someone else to check them too.
 
 ```bash
-bun run selfcheck   # 46 assertions: policy, every detector, audit trail, failover
+bun run selfcheck   # 50 assertions: policy, every detector, audit trail, failover
 bun run eval        # detection quality against the labelled golden set
+bun run load 10000  # sustained traffic, for latency and economics at scale
+bun run probe       # ask a live model real questions, report what it does
 bun run seed        # populate the console with a session of realistic traffic
 ```
+
+At ten thousand interactions the gateway sustains 19 per second on one laptop
+core, with a p95 of 170ms, precision and recall of 1.000 against planted risk,
+and an oversight cost of $0.018 per thousand interactions against $7.92 of
+routing savings. The load test is also what caught the worst bug in the project,
+described in [evaluation.md](docs/evaluation.md).
 
 `selfcheck` runs in about three seconds once models are cached and exits non-zero
 on any failure. It covers the things a reader would otherwise have to take on

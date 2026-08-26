@@ -82,6 +82,7 @@ app.post("/api/check", async (c) => {
     history: Array.isArray(body.history) ? body.history : undefined,
     usage: body.usage,
     savedUsd: typeof body.savedUsd === "number" ? body.savedUsd : undefined,
+    sessionId: typeof body.sessionId === "string" ? body.sessionId : undefined,
   });
   return c.json(result);
 });

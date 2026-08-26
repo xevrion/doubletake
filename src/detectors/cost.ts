@@ -58,6 +58,12 @@ export interface BudgetConfig {
   loopThreshold: number;
 }
 
+// A runaway loop is one caller repeating itself, not many callers asking the
+// same popular question. Keying repetition on the profile made "what is your
+// refund window?" look like an agent stuck in a cycle, which in a load test
+// flagged a third of all clean traffic. Repetition only counts within a single
+// conversation, so a session id is required before the check runs at all.
+
 const DEFAULT_BUDGET: BudgetConfig = { hourlyUsdCap: 5.0, perRequestUsdCap: 0.25, loopThreshold: 4 };
 
 function hashish(s: string): string {
@@ -94,10 +100,17 @@ export function makeCostDetector(cfg: BudgetConfig = DEFAULT_BUDGET): Detector {
       b.spentUsd += usage.costUsd;
       b.requestCount += 1;
 
-      const sig = hashish(input.prompt);
-      b.recentHashes.push(sig);
-      if (b.recentHashes.length > 12) b.recentHashes.shift();
-      const repeats = b.recentHashes.filter((h) => h === sig).length;
+      // Repetition is tracked per conversation. Without one there is nothing to
+      // loop within, and counting across callers produces false alarms on
+      // exactly the questions a support bot is meant to answer often.
+      let repeats = 0;
+      if (input.sessionId) {
+        const conv = budgetState(`session:${input.sessionId}`);
+        const sig = hashish(input.prompt);
+        conv.recentHashes.push(sig);
+        if (conv.recentHashes.length > 12) conv.recentHashes.shift();
+        repeats = conv.recentHashes.filter((h) => h === sig).length;
+      }
 
       const evidence: Evidence[] = [];
       let score = 0;

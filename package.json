@@ -12,7 +12,8 @@
     "eval": "bun run scripts/run-eval.ts",
     "selfcheck": "bun run scripts/selfcheck.ts",
     "seed": "bun run scripts/seed-traffic.ts",
-    "probe": "bun run scripts/live-probe.ts"
+    "probe": "bun run scripts/live-probe.ts",
+    "load": "bun run scripts/load-test.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

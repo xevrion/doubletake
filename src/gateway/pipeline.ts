@@ -26,6 +26,7 @@ export interface CheckRequest {
   history?: { role: "user" | "assistant"; content: string }[];
   usage?: TokenUsage;
   savedUsd?: number;
+  sessionId?: string;
 }
 
 export interface CheckResult {
@@ -82,6 +83,7 @@ export async function check(req: CheckRequest): Promise<CheckResult> {
   const input: DetectorInput = {
     prompt: req.prompt, response: req.response, sources: req.sources,
     history: req.history, profileId: profile.id, usage: req.usage,
+    sessionId: req.sessionId,
   };
 
   // Nothing to verify in "I can't help with that", and escalating a model for

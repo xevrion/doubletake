@@ -56,6 +56,9 @@ export interface DetectorInput {
   history?: Turn[];             // multi-turn context: risk compounds across turns
   profileId: string;
   usage?: TokenUsage;
+  // Identifies one conversation, so per-conversation checks (agent loops,
+  // compounding multi-turn risk) can tell callers apart.
+  sessionId?: string;
 }
 
 export interface GroundingSource {
