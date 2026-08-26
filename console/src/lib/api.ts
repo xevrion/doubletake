@@ -90,6 +90,15 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface Sample {
+  prompt: string;
+  response: string;
+  profile: string;
+  capability: number;
+  kind: "clean" | "hedged" | "risky";
+  why?: string;
+}
+
 export interface Paged<T> {
   items: T[];
   total: number;
@@ -100,6 +109,7 @@ export interface Paged<T> {
 export interface KnowledgeDoc { id: string; title?: string; text: string }
 
 export const api = {
+  samples: () => json<{ samples: Sample[] }>("/api/samples").then((d) => d.samples),
   knowledge: () => json<{ company: string; documents: KnowledgeDoc[] }>("/api/knowledge"),
   profiles: () => json<{ profiles: Profile[] }>("/api/profiles").then((d) => d.profiles),
   providers: () => json<{ active: string; all: { id: string; label: string; model: string; ready: boolean; note: string }[] }>("/api/providers"),

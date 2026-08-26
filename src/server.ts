@@ -18,6 +18,25 @@ app.get("/api/profiles", (c) => c.json({ profiles: listProfiles() }));
 
 // The demo company's policy documents, so the console can show what answers are
 // being checked against. A real deployment supplies these per request instead.
+// Example responses the console can load into Live check. Drawn from the same
+// corpus the load test uses, so what a person tries by hand and what the
+// benchmark measures are the same material.
+app.get("/api/samples", async (c) => {
+  const corpus = await Bun.file("data/traffic-corpus.json").json() as {
+    clean: Record<string, unknown>[];
+    hedged: Record<string, unknown>[];
+    risky: Record<string, unknown>[];
+  };
+  const tag = (xs: Record<string, unknown>[], kind: string) => xs.map((x) => ({ ...x, kind }));
+  return c.json({
+    samples: [
+      ...tag(corpus.risky, "risky"),
+      ...tag(corpus.clean, "clean"),
+      ...tag(corpus.hedged, "hedged"),
+    ],
+  });
+});
+
 app.get("/api/knowledge", (c) => c.json({
   company: knowledgeBase().company,
   documents: allDocuments(),

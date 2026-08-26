@@ -23,6 +23,7 @@ export function Queue({
   onPage: (offset: number) => void; onChange: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Which item is open for review, and what the reviewer has typed so far.
   // A browser prompt() would block the page and cannot be styled, and this is
@@ -38,6 +39,7 @@ export function Queue({
   async function submit(item: QueueItem) {
     if (!open) return;
     setBusy(item.id);
+    setError(null);
     try {
       await api.override(item.id, {
         to: open.verdict === "false-positive" ? "pass" : item.action,
@@ -48,6 +50,18 @@ export function Queue({
       setOpen(null);
       setNote("");
       onChange();
+    } catch (e) {
+      // A 404 here means the record is gone, which in practice means the queue
+      // on screen is older than the data behind it. Say so and reload rather
+      // than leaving a button that silently does nothing.
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg.includes("404")
+        ? "This item is no longer in the queue. Refreshing."
+        : `Could not save the review: ${msg}`);
+      if (msg.includes("404")) {
+        setOpen(null);
+        onChange();
+      }
     } finally {
       setBusy(null);
     }
@@ -66,6 +80,12 @@ export function Queue({
           it whether a flag was right, which is why the buttons ask for a reason and why the answers
           feed straight into threshold tuning on the Trust metrics tab.
         </Why>
+
+        {error && (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+            {error}
+          </p>
+        )}
 
         {items.length === 0 ? (
           <p className="py-12 text-center text-[13px] text-muted-foreground">Nothing held for review.</p>
