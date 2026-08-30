@@ -13,3 +13,5 @@ console/node_modules/
 web/assets/
 web/index.html
 data/eval-results.json
+submission/*.pdf
+submission/*.pptx

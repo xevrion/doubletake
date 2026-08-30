@@ -165,7 +165,67 @@ Numbers, dates and citations for all of the above are in
 [regulatory.md](regulatory.md), separated from this document so they can be
 checked and updated independently.
 
-## 6. Roadmap
+## 6. Evidence
+
+Claims in a proposal are cheap, so everything below is reproducible from the
+repository in three commands.
+
+### Detection quality
+
+Measured by running a labelled set through the real gateway, not asserted.
+
+| Metric | Value |
+|---|---|
+| Precision | 1.000 |
+| Recall | 1.000 |
+| False positive rate | 0.000 |
+| Action agreement | 13 of 15 |
+
+The honest caveat, stated in the console itself: fifteen cases is a regression
+test, not a certification. It shows the known failure modes stay fixed. It is
+not evidence of catching a novel failure nobody anticipated.
+
+### Behaviour at volume
+
+Ten thousand interactions across all four profiles with an 8% planted risk rate,
+which is the scale the brief describes.
+
+| Measure | Result |
+|---|---|
+| Throughput | 19 per second on one laptop core |
+| Latency p50 / p95 / p99 | 33 ms / 170 ms / 266 ms |
+| Passed untouched | 92.0% |
+| Held for review | 8.0% |
+| Oversight cost | $0.018 per 1,000 interactions |
+| Routing saved | $7.92 |
+| Net | positive |
+
+The load test is also what caught the worst defect in the project. The first run
+at this scale reported 601 false positives and a precision of 0.209, which would
+have put fifteen thousand items a week in front of a reviewer. The agent-loop
+detector was counting repeated prompts per use case, so many different customers
+asking the same common question looked like one agent stuck in a cycle.
+Repetition is now counted per conversation. False positives went to zero.
+
+No single-response test caught that. It only appeared under sustained traffic.
+
+### Against a live model
+
+`bun run probe` asks a real model real questions against the knowledge base and
+reports what the gateway does with the answers it actually produced, including
+questions the knowledge base deliberately cannot answer. That test is harder and
+less flattering than the golden set, and it is the one that found three
+production defects: refusals being flagged as hallucinations, unrelated
+documents manufacturing contradictions, and the grounding check being dropped on
+fast profiles because its latency budget was sized for a network call.
+
+### Verification
+
+`bun run selfcheck` runs 61 assertions across the policy engine, every detector,
+the audit trail, provider failover and every HTTP route, in about three seconds,
+and exits non-zero on any failure.
+
+## 7. Roadmap
 
 **Now (prototype).** Working gateway, seven detectors across two tiers, four
 policy profiles, audit trail with structured overrides, reviewer queue, tuning
@@ -186,7 +246,7 @@ of failure.
 export shaped for auditors. Coverage of tool calls and agent actions, not just
 generated text.
 
-## 7. Risks
+## 8. Risks
 
 **A guardrail can be evaded.** Published research shows character-level attacks
 defeating production guardrails, including commercial ones. We do not claim
@@ -211,7 +271,7 @@ not yet implement.
 not calibrated against real traffic. Everything in Phase 1 is about replacing our
 assumptions with a customer's data.
 
-## 8. What we actually built
+## 9. What we actually built
 
 Not a mockup. A running system, verifiable in three commands:
 
